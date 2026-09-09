@@ -1,0 +1,68 @@
+services:
+  # ----------------------------------------------------------------------
+  # PostgreSQL: một instance, tạo sẵn 3 database riêng cho 3 service
+  # (tôn trọng nguyên tắc "mỗi service một database" ở mức logic).
+  # ----------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # Danh sách database sẽ được script init tạo tự động
+      POSTGRES_MULTIPLE_DATABASES: auth_db,user_db,task_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------
+  # Redis: lưu refresh token, phục vụ rate limiting
+  # ----------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: tm_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------
+  # RabbitMQ: message broker cho giao tiếp bất đồng bộ (event-driven)
+  # Cổng 5672 (AMQP) + 15672 (giao diện quản trị web)
+  # ----------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: tm_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
