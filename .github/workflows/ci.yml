@@ -1,0 +1,73 @@
+name: CI
+
+# Chạy CI khi push lên main và trên mỗi pull request nhắm vào main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    # Postgres phục vụ generate Prisma + kiểm tra kết nối DB
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      USER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/user_db?schema=public
+      AUTH_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/auth_db?schema=public
+      TASK_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/task_db?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create databases (mỗi service một DB)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for db in user_db auth_db task_db; do
+            psql -h localhost -U postgres -c "CREATE DATABASE $db;" || true
+          done
+
+      - name: Generate Prisma client (user-service)
+        run: npm run prisma:user:generate
+
+      - name: Check DB connection (user_db)
+        run: echo "SELECT 1;" | npx prisma db execute --stdin --schema=apps/user-service/prisma/schema.prisma
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build all apps
+        run: |
+          for app in gateway auth-service user-service task-service; do
+            echo "Building $app..."
+            npx nest build "$app"
+          done
+
+      - name: Test
+        run: npm test

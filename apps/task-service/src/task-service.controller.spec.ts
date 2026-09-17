@@ -11,7 +11,9 @@ describe('TaskServiceController', () => {
       providers: [TaskServiceService],
     }).compile();
 
-    taskServiceController = app.get<TaskServiceController>(TaskServiceController);
+    taskServiceController = app.get<TaskServiceController>(
+      TaskServiceController,
+    );
   });
 
   describe('root', () => {
