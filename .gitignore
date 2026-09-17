@@ -37,3 +37,6 @@ yarn-error.log*
 # temp
 /tmp
 /temp
+
+# Prisma generated clients (mỗi service tự generate)
+apps/*/generated
