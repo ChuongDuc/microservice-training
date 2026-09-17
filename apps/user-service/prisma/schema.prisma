@@ -1,6 +1,5 @@
 // Prisma schema cho USER SERVICE
 // Mỗi service có schema + client riêng (nguyên tắc "mỗi service một DB").
-// Model User sẽ được thêm ở issue #2.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,4 +10,30 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("USER_DATABASE_URL")
+}
+
+// Vai trò người dùng (dùng cho phân quyền RBAC ở các giai đoạn sau).
+enum Role {
+  USER
+  ADMIN
+}
+
+// Trạng thái tài khoản người dùng.
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+// Hồ sơ người dùng do USER SERVICE quản lý.
+// LƯU Ý: KHÔNG có field password — thông tin xác thực (password/credential)
+// thuộc về AUTH SERVICE (ranh giới nghiệp vụ giữa hai service).
+model User {
+  id          String     @id @default(uuid())
+  email       String     @unique
+  displayName String
+  avatar      String? // nullable: người dùng có thể chưa đặt ảnh đại diện
+  role        Role       @default(USER)
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
