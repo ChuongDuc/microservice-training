@@ -1,0 +1,14 @@
+// Prisma schema cho USER SERVICE
+// Mỗi service có schema + client riêng (nguyên tắc "mỗi service một DB").
+// Model User sẽ được thêm ở issue #2.
+
+generator client {
+  provider = "prisma-client-js"
+  // Xuất client vào thư mục riêng của service để không đè lên client của service khác
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("USER_DATABASE_URL")
+}
