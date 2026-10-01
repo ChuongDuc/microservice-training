@@ -1,3 +1,4 @@
+import { createRpcValidationPipe } from '@app/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -15,6 +16,9 @@ async function bootstrap() {
       options: { host: '0.0.0.0', port },
     },
   );
+
+  // Validate payload của mọi message theo DTO (dữ liệu sai bị từ chối trước khi vào handler).
+  app.useGlobalPipes(createRpcValidationPipe());
 
   await app.listen();
   Logger.log(`User Service (TCP) đang lắng nghe tại cổng ${port}`, 'Bootstrap');
