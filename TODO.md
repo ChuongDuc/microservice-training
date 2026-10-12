@@ -20,7 +20,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [ ] Chọn ORM (TypeORM hoặc Prisma) + kết nối `user_db`
 - [ ] Entity `User` (id, email, displayName, avatar, role, status, createdAt)
 - [ ] Chuyển User Service sang microservice mode (TCP transport)
-- [ ] Message handler: `user.create`, `user.find_by_id`, `user.find_by_email`, `user.update`, `user.list`
+- [x] Message handler: `user.create`, `user.find_by_id`, `user.find_by_email`, `user.update`, `user.list`
 - [ ] Validation DTO (`class-validator`)
 
 ## Giai đoạn 2 — Auth Service + Gateway (scope Bảo mật)
