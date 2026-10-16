@@ -1,0 +1,39 @@
+// Prisma schema cho AUTH SERVICE
+// Mỗi service có schema + client riêng (nguyên tắc "mỗi service một DB").
+
+generator client {
+  provider = "prisma-client-js"
+  // Xuất client vào thư mục riêng của service để không đè lên client của service khác
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("AUTH_DATABASE_URL")
+}
+
+// Thông tin đăng nhập của người dùng do AUTH SERVICE quản lý.
+// `userId` là id của User bên USER SERVICE — KHÔNG có foreign key xuyên DB,
+// hai service chỉ liên kết với nhau qua giá trị id (ranh giới nghiệp vụ).
+model Credential {
+  userId        String         @id
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+}
+
+// Refresh token đã cấp. Chỉ lưu HASH của token (không lưu token gốc),
+// lộ DB cũng không dùng được token để đăng nhập.
+model RefreshToken {
+  id         String     @id @default(uuid())
+  userId     String
+  tokenHash  String     @unique
+  expiresAt  DateTime
+  createdAt  DateTime   @default(now())
+  // Xoá credential thì xoá luôn các refresh token của user đó
+  credential Credential @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+}
