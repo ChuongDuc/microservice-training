@@ -1,99 +1,107 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Task Management — Microservices với NestJS
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Dự án học tập: hệ thống quản lý công việc viết theo kiến trúc microservices, dùng **NestJS monorepo**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- **4 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`
+- **Thư viện dùng chung** `@app/common` trong `libs/common` (constants, message patterns, pipe...)
+- **Giao tiếp**: TCP (đồng bộ, giữa Gateway và các service) + RabbitMQ (bất đồng bộ, event)
+- **Hạ tầng** (Docker): PostgreSQL (mỗi service một DB: `auth_db`, `user_db`, `task_db`), Redis, RabbitMQ
+- **ORM**: Prisma, mỗi service có schema và client riêng (`apps/<service>/prisma`)
 
-## Description
+> Lộ trình và trạng thái từng phần: xem [TODO.md](TODO.md).
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Yêu cầu
 
-## Project setup
+- Node.js LTS (kèm npm)
+- Docker + Docker Compose
+
+## Cài đặt và chạy
+
+### 1. Cài dependencies
 
 ```bash
-$ npm install
+npm install
 ```
 
-## Compile and run the project
+### 2. Tạo file môi trường
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cp .env.example .env
 ```
 
-## Run tests
+Giá trị mặc định trong `.env.example` đã khớp với `docker-compose.yml`, nên chạy local không cần sửa gì. Chỉ cần đổi `JWT_*_SECRET` khi dùng thật.
+
+### 3. Bật hạ tầng (Postgres, Redis, RabbitMQ)
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+docker compose up -d
+docker compose ps        # đợi cả 3 container ở trạng thái healthy
 ```
 
-## Deployment
+Lần chạy đầu, script `docker/postgres/init-multiple-dbs.sh` tự tạo 3 database `auth_db`, `user_db`, `task_db`.
+Giao diện quản trị RabbitMQ: http://localhost:15672 (guest/guest).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Tắt hạ tầng: `docker compose down` (thêm `-v` nếu muốn xoá luôn dữ liệu).
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 4. Prisma: generate client + migrate DB
+
+Mỗi service có Prisma schema riêng, nên chạy cho từng service:
 
 ```bash
-$ npm install -g mau
-$ mau deploy
+# User Service (user_db)
+npm run prisma:user:generate
+npm run prisma:user:migrate
+
+# Auth Service (auth_db)
+npm run prisma:auth:generate
+npm run prisma:auth:migrate
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Client được sinh vào `apps/<service>/generated/prisma`. `migrate` chạy `prisma migrate dev`: áp dụng migration có sẵn và tự gọi lại `generate`.
 
-## Resources
+Lệnh Prisma khác (studio, reset...) thì gọi trực tiếp và đặt `--schema` **sau** tên lệnh:
 
-Check out a few resources that may come in handy when working with NestJS:
+```bash
+npx prisma studio --schema=apps/user-service/prisma/schema.prisma
+npx prisma migrate reset --schema=apps/user-service/prisma/schema.prisma
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### 5. Chạy service (chế độ watch)
 
-## Support
+Mỗi service là một process riêng, mở mỗi service một terminal:
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định 4002)
+npm run start:dev auth-service
+npm run start:dev task-service
+npm run start:dev gateway         # HTTP, http://localhost:3000
+```
 
-## Stay in touch
+> Hiện tại mới có `user-service` chạy ở chế độ TCP microservice. `gateway`, `auth-service`, `task-service` vẫn là app HTTP mẫu và cùng nghe cổng 3000, nên đừng chạy chúng cùng lúc cho tới khi các giai đoạn sau hoàn thành.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
 
-## License
+## Test
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```bash
+# Unit test (mọi file *.spec.ts trong apps/ và libs/)
+npm test
+
+# E2E User Service: bật User Service thật qua TCP (cổng 4102) và gọi bằng ClientProxy.
+# Cần Postgres đang chạy và đã chạy npm run prisma:user:migrate.
+npm run test:e2e:user
+```
+
+## Cấu trúc thư mục
+
+```
+apps/
+  gateway/         # API Gateway (HTTP)
+  auth-service/    # Đăng ký, đăng nhập, JWT, refresh token
+  user-service/    # Quản lý user (Prisma + TCP)
+  task-service/    # Quản lý task
+libs/
+  common/          # @app/common: constants, message patterns, pipe dùng chung
+docker/            # Script khởi tạo Postgres
+docker-compose.yml # Postgres + Redis + RabbitMQ
+```
