@@ -1,5 +1,7 @@
+import { SERVICE_TCP_PORTS, USER_SERVICE } from '@app/common';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -8,6 +10,22 @@ import { PrismaModule } from './prisma/prisma.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
+    // TCP client tới USER SERVICE (dùng khi đăng ký để tạo hồ sơ user)
+    ClientsModule.registerAsync([
+      {
+        name: USER_SERVICE,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.TCP,
+          options: {
+            host: config.get('USER_SERVICE_HOST', 'localhost'),
+            port: Number(
+              config.get('USER_SERVICE_PORT', SERVICE_TCP_PORTS.USER),
+            ),
+          },
+        }),
+      },
+    ]),
   ],
   controllers: [AuthServiceController],
   providers: [AuthServiceService],

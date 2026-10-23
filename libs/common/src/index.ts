@@ -2,4 +2,5 @@
 export * from './constants/services';
 export * from './constants/patterns';
 export * from './dto/user';
+export * from './dto/auth';
 export * from './pipes';
