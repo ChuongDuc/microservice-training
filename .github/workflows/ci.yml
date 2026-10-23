@@ -59,6 +59,12 @@ jobs:
       - name: Check DB connection (user_db)
         run: echo "SELECT 1;" | npx prisma db execute --stdin --schema=apps/user-service/prisma/schema.prisma
 
+      - name: Generate Prisma client (auth-service)
+        run: npm run prisma:auth:generate
+
+      - name: Check DB connection (auth_db)
+        run: echo "SELECT 1;" | npx prisma db execute --stdin --schema=apps/auth-service/prisma/schema.prisma
+
       - name: Lint
         run: npm run lint
 
