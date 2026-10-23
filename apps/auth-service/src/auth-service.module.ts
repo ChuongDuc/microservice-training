@@ -1,6 +1,7 @@
 import { SERVICE_TCP_PORTS, USER_SERVICE } from '@app/common';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
@@ -10,6 +11,8 @@ import { PrismaModule } from './prisma/prisma.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
+    // Secret/thời hạn truyền khi ký từng loại token (access/refresh dùng secret khác nhau)
+    JwtModule.register({}),
     // TCP client tới USER SERVICE (dùng khi đăng ký để tạo hồ sơ user)
     ClientsModule.registerAsync([
       {

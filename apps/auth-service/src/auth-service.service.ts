@@ -1,7 +1,17 @@
-import { RegisterDto, USER_PATTERNS, USER_SERVICE } from '@app/common';
+import {
+  AuthTokens,
+  JwtPayload,
+  LoginDto,
+  RegisterDto,
+  USER_PATTERNS,
+  USER_SERVICE,
+} from '@app/common';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import * as argon2 from 'argon2';
+import { createHash, randomUUID } from 'crypto';
 import { firstValueFrom, timeout } from 'rxjs';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from './prisma/prisma.service';
@@ -29,9 +39,17 @@ const USER_SERVICE_TIMEOUT_MS = 5000;
 export class AuthServiceService {
   private readonly logger = new Logger(AuthServiceService.name);
 
+  /**
+   * Hash giả để verify khi email không tồn tại: thời gian phản hồi giống trường hợp
+   * sai mật khẩu, kẻ tấn công không đo thời gian để dò email nào đã đăng ký.
+   */
+  private readonly dummyHash = argon2.hash(randomUUID());
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(USER_SERVICE) private readonly userClient: ClientProxy,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -52,7 +70,10 @@ export class AuthServiceService {
     // argon2id (mặc định của thư viện) — salt ngẫu nhiên được nhúng sẵn trong chuỗi hash
     const passwordHash = await argon2.hash(password);
 
-    const user = await this.createUserProfile(email, displayName);
+    const user = await this.callUserService(USER_PATTERNS.CREATE, {
+      email,
+      displayName,
+    });
 
     try {
       await this.prisma.credential.create({
@@ -73,15 +94,96 @@ export class AuthServiceService {
     return user;
   }
 
+  /**
+   * Đăng nhập: kiểm tra password → lấy role mới nhất từ USER SERVICE → cấp
+   * access token (JWT ngắn hạn) + refresh token (lưu hash vào auth_db).
+   * Sai email hay sai mật khẩu đều trả cùng một lỗi 401 để không lộ email nào tồn tại.
+   */
+  async login({ email, password }: LoginDto): Promise<AuthTokens> {
+    const credential = await this.prisma.credential.findUnique({
+      where: { email },
+    });
+    const valid = await argon2.verify(
+      credential?.passwordHash ?? (await this.dummyHash),
+      password,
+    );
+    if (!credential || !valid) throw this.invalidCredentials();
+
+    const user = await this.findUserProfile(credential.userId);
+    if (user.status !== 'ACTIVE') {
+      throw new RpcException({
+        statusCode: 403,
+        message: 'Tài khoản đã bị khoá',
+      });
+    }
+
+    return this.issueTokens({ sub: user.id, role: user.role });
+  }
+
+  /** Ký cặp token và lưu hash của refresh token. */
+  private async issueTokens(payload: JwtPayload): Promise<AuthTokens> {
+    const accessToken = await this.jwt.signAsync(payload, {
+      secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN', '15m'),
+    });
+    // Refresh token chỉ cần userId; `jti` ngẫu nhiên để mỗi token là duy nhất
+    // (2 lần login trong cùng 1 giây không sinh ra token trùng nhau).
+    const refreshToken = await this.jwt.signAsync(
+      { sub: payload.sub },
+      {
+        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        jwtid: randomUUID(),
+      },
+    );
+
+    const { exp } = this.jwt.decode<{ exp: number }>(refreshToken);
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: payload.sub,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt: new Date(exp * 1000),
+      },
+    });
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * SHA-256 (không dùng argon2): token đã đủ ngẫu nhiên nên không brute-force được,
+   * và hash cố định mới tra cứu được theo cột unique `tokenHash`.
+   */
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  /** Lấy hồ sơ user; user không còn bên USER SERVICE thì coi như đăng nhập sai. */
+  private async findUserProfile(id: string): Promise<UserProfile> {
+    try {
+      return await this.callUserService(USER_PATTERNS.FIND_BY_ID, { id });
+    } catch (error) {
+      if (
+        error instanceof RpcException &&
+        (error.getError() as { statusCode?: number }).statusCode === 404
+      ) {
+        this.logger.warn(
+          `Credential của user ${id} không có hồ sơ bên User Service`,
+        );
+        throw this.invalidCredentials();
+      }
+      throw error;
+    }
+  }
+
   /** Gọi USER SERVICE qua TCP, chuyển lỗi về dạng RpcException có statusCode. */
-  private async createUserProfile(
-    email: string,
-    displayName: string,
+  private async callUserService(
+    pattern: string,
+    payload: unknown,
   ): Promise<UserProfile> {
     try {
       return await firstValueFrom(
         this.userClient
-          .send<UserProfile>(USER_PATTERNS.CREATE, { email, displayName })
+          .send<UserProfile>(pattern, payload)
           .pipe(timeout(USER_SERVICE_TIMEOUT_MS)),
       );
     } catch (error) {
@@ -97,6 +199,13 @@ export class AuthServiceService {
         message: 'User Service không khả dụng',
       });
     }
+  }
+
+  private invalidCredentials(): RpcException {
+    return new RpcException({
+      statusCode: 401,
+      message: 'Email hoặc mật khẩu không đúng',
+    });
   }
 
   private emailConflict(email: string): RpcException {

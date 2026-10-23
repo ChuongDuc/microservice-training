@@ -27,7 +27,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [ ] Kết nối `auth_db`, entity `Credential`, `RefreshToken`
 - [x] Hash mật khẩu (`argon2`)
 - [x] Đăng ký: Auth → gọi User Service (TCP) tạo user
-- [ ] Đăng nhập: cấp access token (JWT) + refresh token
+- [x] Đăng nhập: cấp access token (JWT) + refresh token
 - [ ] Refresh token + rotation; đăng xuất
 - [ ] Gateway: REST routes `/auth/*`, kết nối TCP client tới Auth/User
 - [ ] JWT Auth Guard ở Gateway
