@@ -11,7 +11,7 @@ import { PrismaClient } from '../../generated/prisma';
 /**
  * PrismaService quản lý kết nối tới database của AUTH SERVICE.
  *
- * - extends PrismaClient: kế thừa toàn bộ query API (this.credential, this.refreshToken, this.$transaction, ...).
+ * - extends PrismaClient: kế thừa toàn bộ query API (this.credential, this.$transaction, ...).
  * - OnModuleInit: mở kết nối khi module khởi động (fail-fast nếu DB không sẵn sàng).
  * - OnModuleDestroy: đóng kết nối khi ứng dụng tắt để tránh rò rỉ connection.
  *

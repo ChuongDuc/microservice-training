@@ -2,6 +2,7 @@ import {
   AuthTokens,
   JwtPayload,
   LoginDto,
+  RefreshTokenDto,
   RegisterDto,
   USER_PATTERNS,
   USER_SERVICE,
@@ -15,6 +16,7 @@ import { createHash, randomUUID } from 'crypto';
 import { firstValueFrom, timeout } from 'rxjs';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from './prisma/prisma.service';
+import { RedisService } from './redis/redis.service';
 
 /**
  * Hồ sơ user do USER SERVICE trả về (khai báo các field chính, payload thực tế còn
@@ -30,6 +32,9 @@ export interface UserProfile {
 
 /** Thời gian tối đa chờ USER SERVICE phản hồi. */
 const USER_SERVICE_TIMEOUT_MS = 5000;
+
+/** Tiền tố key Redis: `refresh_token:<sha256 của token>` -> userId. */
+const REFRESH_TOKEN_KEY_PREFIX = 'refresh_token:';
 
 /**
  * Nghiệp vụ xác thực. Lỗi nghiệp vụ ném RpcException({ statusCode, message })
@@ -47,6 +52,7 @@ export class AuthServiceService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     @Inject(USER_SERVICE) private readonly userClient: ClientProxy,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
@@ -96,7 +102,7 @@ export class AuthServiceService {
 
   /**
    * Đăng nhập: kiểm tra password → lấy role mới nhất từ USER SERVICE → cấp
-   * access token (JWT ngắn hạn) + refresh token (lưu hash vào auth_db).
+   * access token (JWT ngắn hạn) + refresh token (lưu hash vào Redis).
    * Sai email hay sai mật khẩu đều trả cùng một lỗi 401 để không lộ email nào tồn tại.
    */
   async login({ email, password }: LoginDto): Promise<AuthTokens> {
@@ -109,7 +115,56 @@ export class AuthServiceService {
     );
     if (!credential || !valid) throw this.invalidCredentials();
 
-    const user = await this.findUserProfile(credential.userId);
+    return this.issueTokensForUser(
+      credential.userId,
+      this.invalidCredentials(),
+    );
+  }
+
+  /**
+   * Refresh token rotation: mỗi refresh token chỉ dùng được MỘT lần. Đổi token cũ
+   * lấy cặp token mới (role lấy lại từ USER SERVICE), token cũ bị thu hồi ngay.
+   */
+  async refresh({ refreshToken }: RefreshTokenDto): Promise<AuthTokens> {
+    const { sub, exp } = await this.verifyRefreshToken(refreshToken);
+    const key = this.refreshTokenKey(refreshToken);
+
+    // GETDEL lấy và xoá trong MỘT lệnh nguyên tử: 2 request refresh cùng lúc bằng
+    // cùng một token thì chỉ một request nhận được userId, request còn lại bị 401.
+    const userId = await this.redis.getdel(key);
+    if (userId !== sub) throw this.invalidRefreshToken();
+
+    try {
+      return await this.issueTokensForUser(userId, this.invalidRefreshToken());
+    } catch (error) {
+      // Lỗi phía server (User Service/Redis không khả dụng) không phải lỗi của client:
+      // trả token cũ về Redis để client thử lại, không bị buộc đăng nhập lại.
+      // Lỗi 4xx (bị khoá, không còn hồ sơ) thì token cũ vẫn bị thu hồi.
+      if (!this.isClientError(error)) {
+        await this.restoreRefreshToken(key, userId, exp);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Đăng xuất: xoá refresh token khỏi Redis. Idempotent — token đã bị thu hồi/hết hạn
+   * vẫn trả thành công. Access token còn hạn vẫn dùng được tới khi hết 15 phút.
+   */
+  async logout({ refreshToken }: RefreshTokenDto): Promise<{ success: true }> {
+    await this.redis.del(this.refreshTokenKey(refreshToken));
+    return { success: true };
+  }
+
+  /**
+   * Lấy role/status mới nhất từ USER SERVICE rồi cấp token.
+   * `notFoundError`: lỗi trả về khi user không còn hồ sơ bên USER SERVICE.
+   */
+  private async issueTokensForUser(
+    userId: string,
+    notFoundError: RpcException,
+  ): Promise<AuthTokens> {
+    const user = await this.findUserProfile(userId, notFoundError);
     if (user.status !== 'ACTIVE') {
       throw new RpcException({
         statusCode: 403,
@@ -118,6 +173,38 @@ export class AuthServiceService {
     }
 
     return this.issueTokens({ sub: user.id, role: user.role });
+  }
+
+  /** Kiểm tra chữ ký + hạn của refresh token; sai hoặc hết hạn -> 401. */
+  private async verifyRefreshToken(
+    token: string,
+  ): Promise<{ sub: string; exp: number }> {
+    try {
+      return await this.jwt.verifyAsync<{ sub: string; exp: number }>(token, {
+        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw this.invalidRefreshToken();
+    }
+  }
+
+  /**
+   * Đưa refresh token đã GETDEL trở lại Redis với hạn cũ. NX: không ghi đè nếu key
+   * đã tồn tại. Lỗi khi khôi phục chỉ ghi log để không che mất lỗi gốc.
+   */
+  private async restoreRefreshToken(
+    key: string,
+    userId: string,
+    exp: number,
+  ): Promise<void> {
+    try {
+      await this.redis.set(key, userId, 'EXAT', exp, 'NX');
+    } catch (error) {
+      this.logger.error(
+        `Không khôi phục được refresh token của user ${userId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   /** Ký cặp token và lưu hash của refresh token. */
@@ -137,28 +224,35 @@ export class AuthServiceService {
       },
     );
 
+    // EXAT = thời điểm hết hạn của JWT: Redis tự xoá key khi token hết hạn
     const { exp } = this.jwt.decode<{ exp: number }>(refreshToken);
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: payload.sub,
-        tokenHash: this.hashToken(refreshToken),
-        expiresAt: new Date(exp * 1000),
-      },
-    });
+    await this.redis.set(
+      this.refreshTokenKey(refreshToken),
+      payload.sub,
+      'EXAT',
+      exp,
+    );
 
     return { accessToken, refreshToken };
   }
 
   /**
-   * SHA-256 (không dùng argon2): token đã đủ ngẫu nhiên nên không brute-force được,
-   * và hash cố định mới tra cứu được theo cột unique `tokenHash`.
+   * Key Redis của refresh token. Chỉ lưu SHA-256 (không lưu token gốc, lộ Redis cũng
+   * không dùng được token). Không dùng argon2: token đã đủ ngẫu nhiên nên không
+   * brute-force được, và hash cố định mới tra cứu được theo key.
    */
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+  private refreshTokenKey(token: string): string {
+    return (
+      REFRESH_TOKEN_KEY_PREFIX +
+      createHash('sha256').update(token).digest('hex')
+    );
   }
 
-  /** Lấy hồ sơ user; user không còn bên USER SERVICE thì coi như đăng nhập sai. */
-  private async findUserProfile(id: string): Promise<UserProfile> {
+  /** Lấy hồ sơ user; user không còn bên USER SERVICE thì ném `notFoundError`. */
+  private async findUserProfile(
+    id: string,
+    notFoundError: RpcException,
+  ): Promise<UserProfile> {
     try {
       return await this.callUserService(USER_PATTERNS.FIND_BY_ID, { id });
     } catch (error) {
@@ -169,7 +263,7 @@ export class AuthServiceService {
         this.logger.warn(
           `Credential của user ${id} không có hồ sơ bên User Service`,
         );
-        throw this.invalidCredentials();
+        throw notFoundError;
       }
       throw error;
     }
@@ -208,11 +302,25 @@ export class AuthServiceService {
     });
   }
 
+  private invalidRefreshToken(): RpcException {
+    return new RpcException({
+      statusCode: 401,
+      message: 'Refresh token không hợp lệ hoặc đã bị thu hồi',
+    });
+  }
+
   private emailConflict(email: string): RpcException {
     return new RpcException({
       statusCode: 409,
       message: `Email ${email} đã được đăng ký`,
     });
+  }
+
+  /** Lỗi nghiệp vụ 4xx do client (khác với lỗi hạ tầng 5xx / lỗi không rõ). */
+  private isClientError(error: unknown): boolean {
+    if (!(error instanceof RpcException)) return false;
+    const { statusCode } = error.getError() as { statusCode?: number };
+    return statusCode !== undefined && statusCode < 500;
   }
 
   private hasStatusCode(error: unknown): error is { statusCode: number } {

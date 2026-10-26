@@ -28,7 +28,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Hash mật khẩu (`argon2`)
 - [x] Đăng ký: Auth → gọi User Service (TCP) tạo user
 - [x] Đăng nhập: cấp access token (JWT) + refresh token
-- [ ] Refresh token + rotation; đăng xuất
+- [x] Refresh token + rotation; đăng xuất (Redis)
 - [ ] Gateway: REST routes `/auth/*`, kết nối TCP client tới Auth/User
 - [ ] JWT Auth Guard ở Gateway
 - [ ] Identity propagation (truyền userId/role xuống service trong)

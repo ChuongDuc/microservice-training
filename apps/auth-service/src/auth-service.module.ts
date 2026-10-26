@@ -6,11 +6,13 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
+    RedisModule, // lưu refresh token (hash) có TTL
     // Secret/thời hạn truyền khi ký từng loại token (access/refresh dùng secret khác nhau)
     JwtModule.register({}),
     // TCP client tới USER SERVICE (dùng khi đăng ký để tạo hồ sơ user)
