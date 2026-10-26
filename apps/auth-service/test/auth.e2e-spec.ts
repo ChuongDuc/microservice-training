@@ -5,8 +5,10 @@ import {
   ClientProxyFactory,
   Transport,
 } from '@nestjs/microservices';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import * as argon2 from 'argon2';
+import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService as UserPrismaService } from '../../user-service/src/prisma/prisma.service';
 import { UserServiceModule } from '../../user-service/src/user-service.module';
@@ -14,7 +16,7 @@ import { AuthServiceModule } from '../src/auth-service.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
- * E2E: khởi động User Service + Auth Service thật (TCP), gửi `auth.register` giống cách
+ * E2E: khởi động User Service + Auth Service thật (TCP), gửi `auth.*` giống cách
  * Gateway sẽ gọi, rồi kiểm tra dữ liệu ở CẢ HAI database.
  * Cần Postgres đang chạy và đã migrate user_db + auth_db.
  */
@@ -62,6 +64,7 @@ describe('Auth Service (e2e qua TCP)', () => {
 
   const cleanup = async () => {
     const where = { email: { startsWith: EMAIL_PREFIX } };
+    // refresh token tự xoá theo credential (onDelete: Cascade)
     await authDb?.credential.deleteMany({ where });
     await userDb?.user.deleteMany({ where });
   };
@@ -161,6 +164,92 @@ describe('Auth Service (e2e qua TCP)', () => {
       expect(error.errors.map((e: { field: string }) => e.field)).toEqual(
         expect.arrayContaining(['email', 'password']),
       );
+    });
+  });
+
+  describe(AUTH_PATTERNS.LOGIN, () => {
+    const jwt = new JwtService();
+    const payload = {
+      email: email('login'),
+      password: 'matkhau123',
+      displayName: 'Cường',
+    };
+    let userId: string;
+
+    beforeAll(async () => {
+      ({ id: userId } = await send(AUTH_PATTERNS.REGISTER, payload));
+    });
+
+    it('đúng mật khẩu -> access token (userId + role) + refresh token đã lưu hash', async () => {
+      const tokens = await send(AUTH_PATTERNS.LOGIN, {
+        email: payload.email.toUpperCase(), // email được chuẩn hoá như lúc đăng ký
+        password: payload.password,
+      });
+
+      const access = await jwt.verifyAsync(tokens.accessToken, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+      expect(access).toMatchObject({ sub: userId, role: 'USER' });
+      await expect(
+        jwt.verifyAsync(tokens.refreshToken, {
+          secret: process.env.JWT_REFRESH_SECRET,
+        }),
+      ).resolves.toMatchObject({ sub: userId });
+
+      const stored = await authDb.refreshToken.findUnique({
+        where: {
+          tokenHash: createHash('sha256')
+            .update(tokens.refreshToken)
+            .digest('hex'),
+        },
+      });
+      expect(stored).toMatchObject({ userId });
+      expect(stored!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('role trong token lấy từ User Service (đổi sang ADMIN)', async () => {
+      await userDb.user.update({
+        where: { id: userId },
+        data: { role: 'ADMIN' },
+      });
+
+      const { accessToken } = await send(AUTH_PATTERNS.LOGIN, {
+        email: payload.email,
+        password: payload.password,
+      });
+      expect(jwt.decode(accessToken)).toMatchObject({ role: 'ADMIN' });
+    });
+
+    it('sai mật khẩu -> 401', async () => {
+      await expect(
+        sendError(AUTH_PATTERNS.LOGIN, {
+          email: payload.email,
+          password: 'saimatkhau',
+        }),
+      ).resolves.toMatchObject({ statusCode: 401 });
+    });
+
+    it('email chưa đăng ký -> 401', async () => {
+      await expect(
+        sendError(AUTH_PATTERNS.LOGIN, {
+          email: email('khong-ton-tai'),
+          password: payload.password,
+        }),
+      ).resolves.toMatchObject({ statusCode: 401 });
+    });
+
+    it('tài khoản bị khoá -> 403', async () => {
+      await userDb.user.update({
+        where: { id: userId },
+        data: { status: 'BLOCKED' },
+      });
+
+      await expect(
+        sendError(AUTH_PATTERNS.LOGIN, {
+          email: payload.email,
+          password: payload.password,
+        }),
+      ).resolves.toMatchObject({ statusCode: 403 });
     });
   });
 });
