@@ -14,11 +14,12 @@ import { PrismaService as UserPrismaService } from '../../user-service/src/prism
 import { UserServiceModule } from '../../user-service/src/user-service.module';
 import { AuthServiceModule } from '../src/auth-service.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { RedisService } from '../src/redis/redis.service';
 
 /**
  * E2E: khởi động User Service + Auth Service thật (TCP), gửi `auth.*` giống cách
  * Gateway sẽ gọi, rồi kiểm tra dữ liệu ở CẢ HAI database.
- * Cần Postgres đang chạy và đã migrate user_db + auth_db.
+ * Cần Postgres (đã migrate user_db + auth_db) và Redis đang chạy.
  */
 const AUTH_PORT = 4101; // cổng riêng cho test, tránh đụng service đang chạy
 const USER_PORT = 4102;
@@ -33,6 +34,11 @@ describe('Auth Service (e2e qua TCP)', () => {
   let authApp: INestMicroservice;
   let client: ClientProxy;
   let authDb: PrismaService;
+  let redis: RedisService;
+  /** Refresh token tạo trong test, xoá khỏi Redis khi dọn dẹp. */
+  const issuedTokens: string[] = [];
+  const refreshKey = (token: string) =>
+    'refresh_token:' + createHash('sha256').update(token).digest('hex');
   let userDb: UserPrismaService;
 
   const send = <T = any>(pattern: string, payload: unknown) =>
@@ -64,7 +70,7 @@ describe('Auth Service (e2e qua TCP)', () => {
 
   const cleanup = async () => {
     const where = { email: { startsWith: EMAIL_PREFIX } };
-    // refresh token tự xoá theo credential (onDelete: Cascade)
+    if (issuedTokens.length) await redis?.del(...issuedTokens.map(refreshKey));
     await authDb?.credential.deleteMany({ where });
     await userDb?.user.deleteMany({ where });
   };
@@ -74,6 +80,7 @@ describe('Auth Service (e2e qua TCP)', () => {
     authApp = await startMicroservice(AuthServiceModule, AUTH_PORT);
     userDb = userApp.get(UserPrismaService);
     authDb = authApp.get(PrismaService);
+    redis = authApp.get(RedisService);
     await cleanup();
 
     client = ClientProxyFactory.create({
@@ -185,6 +192,7 @@ describe('Auth Service (e2e qua TCP)', () => {
         email: payload.email.toUpperCase(), // email được chuẩn hoá như lúc đăng ký
         password: payload.password,
       });
+      issuedTokens.push(tokens.refreshToken);
 
       const access = await jwt.verifyAsync(tokens.accessToken, {
         secret: process.env.JWT_ACCESS_SECRET,
@@ -196,15 +204,12 @@ describe('Auth Service (e2e qua TCP)', () => {
         }),
       ).resolves.toMatchObject({ sub: userId });
 
-      const stored = await authDb.refreshToken.findUnique({
-        where: {
-          tokenHash: createHash('sha256')
-            .update(tokens.refreshToken)
-            .digest('hex'),
-        },
-      });
-      expect(stored).toMatchObject({ userId });
-      expect(stored!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+      // Redis lưu hash -> userId, hết hạn đúng lúc JWT hết hạn
+      const key = refreshKey(tokens.refreshToken);
+      await expect(redis.get(key)).resolves.toBe(userId);
+      await expect(redis.expiretime(key)).resolves.toBe(
+        jwt.decode(tokens.refreshToken).exp,
+      );
     });
 
     it('role trong token lấy từ User Service (đổi sang ADMIN)', async () => {
@@ -213,10 +218,11 @@ describe('Auth Service (e2e qua TCP)', () => {
         data: { role: 'ADMIN' },
       });
 
-      const { accessToken } = await send(AUTH_PATTERNS.LOGIN, {
+      const { accessToken, refreshToken } = await send(AUTH_PATTERNS.LOGIN, {
         email: payload.email,
         password: payload.password,
       });
+      issuedTokens.push(refreshToken);
       expect(jwt.decode(accessToken)).toMatchObject({ role: 'ADMIN' });
     });
 
@@ -250,6 +256,115 @@ describe('Auth Service (e2e qua TCP)', () => {
           password: payload.password,
         }),
       ).resolves.toMatchObject({ statusCode: 403 });
+    });
+  });
+
+  describe(`${AUTH_PATTERNS.REFRESH} + ${AUTH_PATTERNS.LOGOUT}`, () => {
+    const jwt = new JwtService();
+    const credentials = { email: email('refresh'), password: 'matkhau123' };
+
+    const login = async () => {
+      const tokens = await send(AUTH_PATTERNS.LOGIN, credentials);
+      issuedTokens.push(tokens.refreshToken);
+      return tokens;
+    };
+
+    const refresh = async (refreshToken: string) => {
+      const tokens = await send(AUTH_PATTERNS.REFRESH, { refreshToken });
+      issuedTokens.push(tokens.refreshToken);
+      return tokens;
+    };
+
+    beforeAll(async () => {
+      await send(AUTH_PATTERNS.REGISTER, {
+        ...credentials,
+        displayName: 'Dũng',
+      });
+    });
+
+    it('refresh -> cặp token mới hợp lệ, token cũ bị xoá khỏi Redis', async () => {
+      const old = await login();
+      const tokens = await refresh(old.refreshToken);
+
+      expect(tokens.refreshToken).not.toBe(old.refreshToken);
+      await expect(
+        jwt.verifyAsync(tokens.accessToken, {
+          secret: process.env.JWT_ACCESS_SECRET,
+        }),
+      ).resolves.toMatchObject({ role: 'USER' });
+      await expect(redis.exists(refreshKey(old.refreshToken))).resolves.toBe(0);
+      await expect(redis.exists(refreshKey(tokens.refreshToken))).resolves.toBe(
+        1,
+      );
+    });
+
+    it('dùng lại refresh token cũ sau khi đã refresh -> 401', async () => {
+      const old = await login();
+      await refresh(old.refreshToken);
+
+      await expect(
+        sendError(AUTH_PATTERNS.REFRESH, { refreshToken: old.refreshToken }),
+      ).resolves.toMatchObject({ statusCode: 401 });
+    });
+
+    it('2 request refresh cùng lúc bằng 1 token -> chỉ 1 request thành công', async () => {
+      const { refreshToken } = await login();
+
+      const results = await Promise.allSettled([
+        refresh(refreshToken),
+        refresh(refreshToken),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([
+        'fulfilled',
+        'rejected',
+      ]);
+    });
+
+    it('logout -> refresh token không dùng được nữa', async () => {
+      const { refreshToken } = await login();
+
+      await expect(
+        send(AUTH_PATTERNS.LOGOUT, { refreshToken }),
+      ).resolves.toEqual({ success: true });
+      await expect(
+        sendError(AUTH_PATTERNS.REFRESH, { refreshToken }),
+      ).resolves.toMatchObject({ statusCode: 401 });
+    });
+
+    it('logout chỉ thu hồi token của phiên đó, phiên khác vẫn refresh được', async () => {
+      const sessionA = await login();
+      const sessionB = await login();
+
+      await send(AUTH_PATTERNS.LOGOUT, { refreshToken: sessionA.refreshToken });
+      await expect(refresh(sessionB.refreshToken)).resolves.toHaveProperty(
+        'accessToken',
+      );
+    });
+
+    it('logout 2 lần -> vẫn thành công', async () => {
+      const { refreshToken } = await login();
+      await send(AUTH_PATTERNS.LOGOUT, { refreshToken });
+
+      await expect(
+        send(AUTH_PATTERNS.LOGOUT, { refreshToken }),
+      ).resolves.toEqual({ success: true });
+    });
+
+    it('refresh token giả mạo -> 401', async () => {
+      const forged = await jwt.signAsync(
+        { sub: 'x' },
+        { secret: 'secret-gia', expiresIn: '7d' },
+      );
+
+      await expect(
+        sendError(AUTH_PATTERNS.REFRESH, { refreshToken: forged }),
+      ).resolves.toMatchObject({ statusCode: 401 });
+    });
+
+    it('payload không phải JWT -> 400', async () => {
+      await expect(
+        sendError(AUTH_PATTERNS.REFRESH, { refreshToken: 'abc' }),
+      ).resolves.toMatchObject({ statusCode: 400 });
     });
   });
 });

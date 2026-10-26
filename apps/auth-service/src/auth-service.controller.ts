@@ -1,4 +1,9 @@
-import { AUTH_PATTERNS, LoginDto, RegisterDto } from '@app/common';
+import {
+  AUTH_PATTERNS,
+  LoginDto,
+  RefreshTokenDto,
+  RegisterDto,
+} from '@app/common';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthServiceService } from './auth-service.service';
@@ -19,5 +24,15 @@ export class AuthServiceController {
   @MessagePattern(AUTH_PATTERNS.LOGIN)
   login(@Payload() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.REFRESH)
+  refresh(@Payload() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.LOGOUT)
+  logout(@Payload() dto: RefreshTokenDto) {
+    return this.authService.logout(dto);
   }
 }
