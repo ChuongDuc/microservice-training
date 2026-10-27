@@ -74,10 +74,10 @@ Mỗi service là một process riêng, mở mỗi service một terminal:
 npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định 4002)
 npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
 npm run start:dev task-service
-npm run start:dev gateway         # HTTP, http://localhost:3000
+npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service
 ```
 
-> Hiện tại `user-service` và `auth-service` đã chạy ở chế độ TCP microservice. `gateway` và `task-service` vẫn là app HTTP mẫu và cùng nghe cổng 3000, nên đừng chạy hai app này cùng lúc cho tới khi các giai đoạn sau hoàn thành.
+> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. `task-service` vẫn là app HTTP mẫu nghe cổng 3000, nên đừng chạy cùng lúc với `gateway` cho tới Giai đoạn 3.
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
 
@@ -90,6 +90,10 @@ npm test
 # E2E User Service: bật User Service thật qua TCP (cổng 4102) và gọi bằng ClientProxy.
 # Cần Postgres đang chạy và đã chạy npm run prisma:user:migrate.
 npm run test:e2e:user
+
+# E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*.
+# Cần Postgres (đã migrate user_db + auth_db) và Redis đang chạy.
+npm run test:e2e:gateway
 ```
 
 ## Cấu trúc thư mục
