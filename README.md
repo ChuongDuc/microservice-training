@@ -72,12 +72,12 @@ Mỗi service là một process riêng, mở mỗi service một terminal:
 
 ```bash
 npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định 4002)
-npm run start:dev auth-service
+npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
 npm run start:dev task-service
 npm run start:dev gateway         # HTTP, http://localhost:3000
 ```
 
-> Hiện tại mới có `user-service` chạy ở chế độ TCP microservice. `gateway`, `auth-service`, `task-service` vẫn là app HTTP mẫu và cùng nghe cổng 3000, nên đừng chạy chúng cùng lúc cho tới khi các giai đoạn sau hoàn thành.
+> Hiện tại `user-service` và `auth-service` đã chạy ở chế độ TCP microservice. `gateway` và `task-service` vẫn là app HTTP mẫu và cùng nghe cổng 3000, nên đừng chạy hai app này cùng lúc cho tới khi các giai đoạn sau hoàn thành.
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
 
