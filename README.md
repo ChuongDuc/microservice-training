@@ -77,7 +77,7 @@ npm run start:dev task-service
 npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service
 ```
 
-> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. `task-service` vẫn là app HTTP mẫu nghe cổng 3000, nên đừng chạy cùng lúc với `gateway` cho tới Giai đoạn 3.
+> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token. `task-service` vẫn là app HTTP mẫu nghe cổng 3000, nên đừng chạy cùng lúc với `gateway` cho tới Giai đoạn 3.
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
 

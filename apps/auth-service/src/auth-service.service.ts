@@ -1,5 +1,6 @@
 import {
   AuthTokens,
+  JWT_ALGORITHM,
   JwtPayload,
   LoginDto,
   RefreshTokenDto,
@@ -182,6 +183,7 @@ export class AuthServiceService {
     try {
       return await this.jwt.verifyAsync<{ sub: string; exp: number }>(token, {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        algorithms: [JWT_ALGORITHM],
       });
     } catch {
       throw this.invalidRefreshToken();
@@ -212,6 +214,7 @@ export class AuthServiceService {
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
       expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN', '15m'),
+      algorithm: JWT_ALGORITHM,
     });
     // Refresh token chỉ cần userId; `jti` ngẫu nhiên để mỗi token là duy nhất
     // (2 lần login trong cùng 1 giây không sinh ra token trùng nhau).
@@ -220,6 +223,7 @@ export class AuthServiceService {
       {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
         expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        algorithm: JWT_ALGORITHM,
         jwtid: randomUUID(),
       },
     );

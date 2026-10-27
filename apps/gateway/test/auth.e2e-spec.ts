@@ -191,6 +191,74 @@ describe('Gateway /auth/* (e2e)', () => {
     });
   });
 
+  describe('GET /auth/me (JwtAuthGuard)', () => {
+    const me = (authorization?: string) => {
+      const req = request(gateway.getHttpServer()).get('/auth/me');
+      return authorization ? req.set('Authorization', authorization) : req;
+    };
+
+    it('access token hợp lệ -> 200 + userId/role của người gọi', async () => {
+      const { accessToken } = await registerAndLogin('me');
+      const user = await userDb.user.findUniqueOrThrow({
+        where: { email: email('me') },
+      });
+
+      await me(`Bearer ${accessToken}`)
+        .expect(200)
+        .expect({ userId: user.id, role: 'USER' });
+    });
+
+    it('role đổi bên User Service -> đăng nhập lại, token mang role mới (ADMIN)', async () => {
+      await registerAndLogin('me-admin');
+      const user = await userDb.user.update({
+        where: { email: email('me-admin') },
+        data: { role: 'ADMIN' },
+      });
+      const { body } = await post('/auth/login', {
+        email: email('me-admin'),
+        password,
+      }).expect(200);
+      issuedTokens.push(body.refreshToken);
+
+      await me(`Bearer ${body.accessToken}`)
+        .expect(200)
+        .expect({ userId: user.id, role: 'ADMIN' });
+    });
+
+    it('thiếu token -> 401 + WWW-Authenticate: Bearer', async () => {
+      const { body } = await me()
+        .expect(401)
+        .expect('WWW-Authenticate', 'Bearer');
+      expect(body).toEqual({ statusCode: 401, message: 'Thiếu access token' });
+    });
+
+    it('header sai định dạng -> 401 invalid_request', async () => {
+      await me('Basic YTpi')
+        .expect(401)
+        .expect('WWW-Authenticate', 'Bearer error="invalid_request"');
+    });
+
+    it('token sai -> 401 invalid_token', async () => {
+      await me('Bearer abc.def.ghi')
+        .expect(401)
+        .expect('WWW-Authenticate', 'Bearer error="invalid_token"');
+    });
+
+    it('dùng refresh token thay access token -> 401', async () => {
+      const { refreshToken } = await registerAndLogin('me-refresh');
+      await me(`Bearer ${refreshToken}`).expect(401);
+    });
+
+    it('route @Public() không cần token (login vẫn 401 do sai mật khẩu, không phải do guard)', async () => {
+      const { body, headers } = await post('/auth/login', {
+        email: email('me'),
+        password: 'sai-mat-khau',
+      }).expect(401);
+      expect(body.message).toBe('Email hoặc mật khẩu không đúng');
+      expect(headers['www-authenticate']).toBeUndefined();
+    });
+  });
+
   describe('Auth Service không khả dụng', () => {
     it('-> 503', async () => {
       // Gateway riêng trỏ tới cổng không có service nào (không tắt authApp: các
