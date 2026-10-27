@@ -1,4 +1,4 @@
-import { USER_PATTERNS, USER_SERVICE } from '@app/common';
+import { JWT_ALGORITHM, USER_PATTERNS, USER_SERVICE } from '@app/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { RpcException } from '@nestjs/microservices';
@@ -191,6 +191,13 @@ describe('AuthServiceService', () => {
       });
       expect(refresh).toMatchObject({ sub: user.id, jti: expect.any(String) });
       expect(refresh.exp - refresh.iat).toBe(7 * 24 * 60 * 60);
+
+      // Ký bằng thuật toán dùng chung mà Gateway chấp nhận khi verify
+      for (const token of [tokens.accessToken, tokens.refreshToken]) {
+        expect(jwt.decode(token, { complete: true }).header.alg).toBe(
+          JWT_ALGORITHM,
+        );
+      }
 
       expect(userClient.send).toHaveBeenCalledWith(USER_PATTERNS.FIND_BY_ID, {
         id: user.id,
