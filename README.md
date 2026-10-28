@@ -29,7 +29,11 @@ npm install
 cp .env.example .env
 ```
 
-Giá trị mặc định trong `.env.example` đã khớp với `docker-compose.yml`, nên chạy local không cần sửa gì. Chỉ cần đổi `JWT_*_SECRET` khi dùng thật.
+Giá trị mặc định trong `.env.example` đã khớp với `docker-compose.yml`. **Bắt buộc đổi `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`**: Gateway/Auth không khởi động nếu secret còn là giá trị mẫu, ngắn hơn 32 ký tự hoặc hai secret trùng nhau. Tạo mỗi secret bằng:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ### 3. Bật hạ tầng (Postgres, Redis, RabbitMQ)
 

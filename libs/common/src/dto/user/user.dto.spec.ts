@@ -71,9 +71,17 @@ describe('UpdateUserDto', () => {
     ).resolves.toBeInstanceOf(UpdateUserDto);
   });
 
+  it('chấp nhận avatar: null (xoá ảnh đại diện)', async () => {
+    await expect(
+      pipe.transform({ avatar: null }, updateMeta),
+    ).resolves.toMatchObject({ avatar: null });
+  });
+
   it.each([
     ['đổi email', { email: 'new@b.com' }],
     ['displayName rỗng', { displayName: '' }],
+    ['displayName null (cột NOT NULL)', { displayName: null }],
+    ['displayName quá 100 ký tự', { displayName: 'a'.repeat(101) }],
     ['avatar không phải URL', { avatar: 'abc' }],
     ['field lạ (status)', { status: 'BLOCKED' }],
   ])('từ chối: %s', async (_case, payload) => {

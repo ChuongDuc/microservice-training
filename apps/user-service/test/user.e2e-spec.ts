@@ -179,6 +179,28 @@ describe('User Service (e2e qua TCP)', () => {
       ).resolves.toMatchObject({ statusCode: 400 });
     });
 
+    it('displayName null -> 400 (không lọt xuống Prisma thành 500)', async () => {
+      await expect(
+        sendError(USER_PATTERNS.UPDATE, {
+          id: created.id,
+          data: { displayName: null },
+        }),
+      ).resolves.toMatchObject({
+        statusCode: 400,
+        errors: [expect.objectContaining({ field: 'data.displayName' })],
+      });
+    });
+
+    it('avatar null -> xoá ảnh đại diện', async () => {
+      await send(USER_PATTERNS.UPDATE, {
+        id: created.id,
+        data: { avatar: 'https://example.com/a.png' },
+      });
+      await expect(
+        send(USER_PATTERNS.UPDATE, { id: created.id, data: { avatar: null } }),
+      ).resolves.toMatchObject({ avatar: null });
+    });
+
     it('không tìm thấy -> 404', async () => {
       await expect(
         sendError(USER_PATTERNS.UPDATE, {
