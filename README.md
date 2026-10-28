@@ -55,6 +55,10 @@ npm run prisma:user:migrate
 # Auth Service (auth_db)
 npm run prisma:auth:generate
 npm run prisma:auth:migrate
+
+# Task Service (task_db)
+npm run prisma:task:generate
+npm run prisma:task:migrate
 ```
 
 Client được sinh vào `apps/<service>/generated/prisma`. `migrate` chạy `prisma migrate dev`: áp dụng migration có sẵn và tự gọi lại `generate`.
