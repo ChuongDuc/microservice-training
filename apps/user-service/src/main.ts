@@ -22,6 +22,8 @@ async function bootstrap() {
 
   // Validate payload của mọi message theo DTO (dữ liệu sai bị từ chối trước khi vào handler).
   app.useGlobalPipes(createRpcValidationPipe());
+  // SIGTERM/SIGINT (vd: docker stop) -> chạy onModuleDestroy, đóng kết nối DB/Redis/TCP
+  app.enableShutdownHooks();
 
   await app.listen();
   Logger.log(

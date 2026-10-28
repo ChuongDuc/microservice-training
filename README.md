@@ -81,11 +81,11 @@ Mỗi service là một process riêng, mở mỗi service một terminal:
 ```bash
 npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định 4002)
 npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
-npm run start:dev task-service
+npm run start:dev task-service    # TCP, cổng TASK_SERVICE_PORT (mặc định 4003)
 npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service
 ```
 
-> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` vẫn là app HTTP mẫu nghe cổng 3000, nên đừng chạy cùng lúc với `gateway` cho tới Giai đoạn 3.
+> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP; route REST `/tasks` ở Gateway làm ở #20.
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
 
@@ -98,6 +98,11 @@ npm test
 # E2E User Service: bật User Service thật qua TCP (cổng 4102) và gọi bằng ClientProxy.
 # Cần Postgres đang chạy và đã chạy npm run prisma:user:migrate.
 npm run test:e2e:user
+
+# E2E Auth Service (cổng 4101/4102) và Task Service (cổng 4103): service thật qua TCP.
+# Cần Postgres đã migrate (auth_db, user_db, task_db) và Redis cho Auth.
+npm run test:e2e:auth
+npm run test:e2e:task
 
 # E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*.
 # Cần Postgres (đã migrate user_db + auth_db) và Redis đang chạy.
