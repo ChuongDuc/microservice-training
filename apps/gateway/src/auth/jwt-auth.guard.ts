@@ -1,4 +1,9 @@
-import { JWT_ALGORITHM, JwtPayload } from '@app/common';
+import {
+  AuthUserDto,
+  isUserRole,
+  JWT_ALGORITHM,
+  JwtPayload,
+} from '@app/common';
 import {
   CanActivate,
   ExecutionContext,
@@ -8,6 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { isUUID } from 'class-validator';
 import { Response } from 'express';
 import { AuthenticatedRequest } from './current-user.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -86,7 +92,7 @@ export class JwtAuthGuard implements CanActivate {
    * Bắt buộc có `exp`: jsonwebtoken chỉ kiểm tra hạn khi token có claim này, token
    * thiếu `exp` (dù ký đúng secret) sẽ không bao giờ hết hạn.
    */
-  private async verify(token: string): Promise<JwtPayload | undefined> {
+  private async verify(token: string): Promise<AuthUserDto | undefined> {
     let payload: Partial<JwtPayload> & { exp?: unknown };
     try {
       // Chỉ chấp nhận thuật toán Auth dùng để ký, chặn token tự đổi `alg` (vd: none)
@@ -98,14 +104,13 @@ export class JwtAuthGuard implements CanActivate {
       return undefined;
     }
     const { sub, role, exp } = payload;
-    if (
-      typeof sub !== 'string' ||
-      typeof role !== 'string' ||
-      typeof exp !== 'number'
-    ) {
+    // Cùng luật với AuthUserDto ở service trong: sai thì 401 ngay tại Gateway, không để
+    // service trong trả 400 về field `user` mà client không hề gửi
+    if (!isUUID(sub) || !isUserRole(role) || typeof exp !== 'number') {
       return undefined;
     }
-    return { sub, role };
+    // Đổi `sub` -> `userId`: dạng danh tính truyền xuống service trong
+    return { userId: sub, role };
   }
 
   /** `Bearer <token>` -> token; sai định dạng -> undefined. */

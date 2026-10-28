@@ -211,4 +211,67 @@ describe('User Service (e2e qua TCP)', () => {
       ).resolves.toMatchObject({ statusCode: 400 });
     });
   });
+
+  describe(USER_PATTERNS.FIND_ME, () => {
+    let created: { id: string };
+
+    beforeAll(async () => {
+      created = await send(USER_PATTERNS.CREATE, {
+        email: email('find-me'),
+        displayName: 'Chi',
+      });
+    });
+
+    it('trả hồ sơ theo userId trong danh tính người gọi', async () => {
+      await expect(
+        send(USER_PATTERNS.FIND_ME, {
+          user: { userId: created.id, role: 'USER' },
+        }),
+      ).resolves.toMatchObject({ id: created.id, email: email('find-me') });
+    });
+
+    it('user không còn tồn tại -> 404', async () => {
+      await expect(
+        sendError(USER_PATTERNS.FIND_ME, {
+          user: {
+            userId: '00000000-0000-4000-8000-000000000000',
+            role: 'USER',
+          },
+        }),
+      ).resolves.toMatchObject({ statusCode: 404 });
+    });
+
+    it('lỗi validate trong user -> chỉ ra đường dẫn field (user.role)', async () => {
+      const error = await sendError(USER_PATTERNS.FIND_ME, {
+        user: { userId: created.id, role: 'ROOT' },
+      });
+      expect(error).toMatchObject({
+        statusCode: 400,
+        errors: [
+          { field: 'user.role', constraints: { isIn: expect.any(String) } },
+        ],
+      });
+    });
+
+    it.each([
+      ['thiếu user', {}],
+      [
+        'gửi id thay vì danh tính',
+        { id: '00000000-0000-4000-8000-000000000000' },
+      ],
+      [
+        'role không hợp lệ',
+        {
+          user: {
+            userId: '00000000-0000-4000-8000-000000000000',
+            role: 'ROOT',
+          },
+        },
+      ],
+    ])('payload sai (%s) -> 400', async (_case, payload) => {
+      await expect(
+        sendError(USER_PATTERNS.FIND_ME, payload),
+      ).resolves.toMatchObject({ statusCode: 400 });
+    });
+  });
 });

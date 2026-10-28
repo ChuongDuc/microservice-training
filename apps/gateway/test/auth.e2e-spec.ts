@@ -259,6 +259,71 @@ describe('Gateway /auth/* (e2e)', () => {
     });
   });
 
+  describe('GET /users/me (identity propagation)', () => {
+    const usersMe = (accessToken?: string) => {
+      const req = request(gateway.getHttpServer()).get('/users/me');
+      return accessToken
+        ? req.set('Authorization', `Bearer ${accessToken}`)
+        : req;
+    };
+
+    it('User Service nhận danh tính từ token -> 200 + hồ sơ đầy đủ của người gọi', async () => {
+      const { accessToken } = await registerAndLogin('users-me');
+
+      const { body } = await usersMe(accessToken).expect(200);
+      expect(body).toMatchObject({
+        id: expect.any(String),
+        email: email('users-me'),
+        displayName: 'users-me',
+        role: 'USER',
+        status: 'ACTIVE',
+      });
+    });
+
+    it('mỗi người gọi nhận hồ sơ của chính mình', async () => {
+      const a = await registerAndLogin('users-me-a');
+      const b = await registerAndLogin('users-me-b');
+
+      const [resA, resB] = await Promise.all([
+        usersMe(a.accessToken).expect(200),
+        usersMe(b.accessToken).expect(200),
+      ]);
+      expect(resA.body.email).toBe(email('users-me-a'));
+      expect(resB.body.email).toBe(email('users-me-b'));
+    });
+
+    it('query/body không ghi đè được danh tính', async () => {
+      await registerAndLogin('users-me-victim');
+      const victimId = (
+        await userDb.user.findUniqueOrThrow({
+          where: { email: email('users-me-victim') },
+        })
+      ).id;
+      const attacker = await registerAndLogin('users-me-attacker');
+
+      const { body } = await request(gateway.getHttpServer())
+        .get(`/users/me?userId=${victimId}&id=${victimId}`)
+        .set('Authorization', `Bearer ${attacker.accessToken}`)
+        .send({ user: { userId: victimId, role: 'ADMIN' } })
+        .expect(200);
+      expect(body.email).toBe(email('users-me-attacker'));
+    });
+
+    it('token còn hạn nhưng user đã bị xoá bên User Service -> 404', async () => {
+      const { accessToken } = await registerAndLogin('users-me-deleted');
+      await authDb.credential.deleteMany({
+        where: { email: email('users-me-deleted') },
+      });
+      await userDb.user.delete({ where: { email: email('users-me-deleted') } });
+
+      await usersMe(accessToken).expect(404);
+    });
+
+    it('thiếu token -> 401, không gọi xuống User Service', async () => {
+      await usersMe().expect(401);
+    });
+  });
+
   describe('Auth Service không khả dụng', () => {
     it('-> 503', async () => {
       // Gateway riêng trỏ tới cổng không có service nào (không tắt authApp: các

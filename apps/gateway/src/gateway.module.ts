@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { UsersController } from './users/users.controller';
 
 /** Cấu hình TCP client tới một service, đọc host/port từ .env. */
 const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
@@ -32,7 +33,7 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     // Secret truyền khi verify (JwtAuthGuard), giống cách Auth Service ký token
     JwtModule.register({}),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, UsersController],
   providers: [
     // Mọi route cần access token, trừ route có @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
