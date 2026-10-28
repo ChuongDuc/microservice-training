@@ -23,7 +23,9 @@
     "prisma:user:generate": "prisma generate --schema=apps/user-service/prisma/schema.prisma",
     "prisma:user:migrate": "prisma migrate dev --schema=apps/user-service/prisma/schema.prisma",
     "prisma:auth:generate": "prisma generate --schema=apps/auth-service/prisma/schema.prisma",
-    "prisma:auth:migrate": "prisma migrate dev --schema=apps/auth-service/prisma/schema.prisma"
+    "prisma:auth:migrate": "prisma migrate dev --schema=apps/auth-service/prisma/schema.prisma",
+    "prisma:task:generate": "prisma generate --schema=apps/task-service/prisma/schema.prisma",
+    "prisma:task:migrate": "prisma migrate dev --schema=apps/task-service/prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

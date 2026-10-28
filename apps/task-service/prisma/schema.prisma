@@ -1,0 +1,49 @@
+// Prisma schema cho TASK SERVICE
+// Mỗi service có schema + client riêng (nguyên tắc "mỗi service một DB").
+
+generator client {
+  provider = "prisma-client-js"
+  // Xuất client vào thư mục riêng của service để không đè lên client của service khác
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TASK_DATABASE_URL")
+}
+
+// Trạng thái công việc.
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+// Mức độ ưu tiên.
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// Công việc do TASK SERVICE quản lý.
+// `ownerId` là id của User bên USER SERVICE — KHÔNG có foreign key xuyên DB,
+// hai service chỉ liên kết với nhau qua giá trị id (ranh giới nghiệp vụ).
+model Task {
+  id          String       @id @default(uuid())
+  // Kiểu uuid ở DB: chặn ownerId rỗng/sai định dạng kể cả khi ghi không qua DTO
+  ownerId     String       @db.Uuid
+  title       String       @db.VarChar(200)
+  description String? // nullable: mô tả là tuỳ chọn
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  // nullable: task có thể không có hạn. timestamptz: lưu thời điểm tuyệt đối (UTC),
+  // không lệch ngày khi client và DB ở múi giờ khác nhau
+  dueDate     DateTime?    @db.Timestamptz(3)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Truy vấn chính: task của một user, mới nhất trước, có phân trang
+  // (WHERE ownerId ORDER BY createdAt DESC LIMIT) — index kép phục vụ cả lọc lẫn sắp xếp
+  @@index([ownerId, createdAt])
+}

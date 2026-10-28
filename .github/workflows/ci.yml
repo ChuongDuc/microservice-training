@@ -56,14 +56,38 @@ jobs:
       - name: Generate Prisma client (user-service)
         run: npm run prisma:user:generate
 
-      - name: Check DB connection (user_db)
-        run: echo "SELECT 1;" | npx prisma db execute --stdin --schema=apps/user-service/prisma/schema.prisma
+      # Áp dụng migration lên DB trống của CI rồi so DB với schema.prisma: sửa schema mà
+      # quên tạo migration -> migrate diff thoát mã 2, CI đỏ
+      - name: Apply migrations + check schema drift (user_db)
+        run: |
+          npx prisma migrate deploy --schema=apps/user-service/prisma/schema.prisma
+          npx prisma migrate diff --exit-code \
+            --from-schema-datasource apps/user-service/prisma/schema.prisma \
+            --to-schema-datamodel apps/user-service/prisma/schema.prisma
 
       - name: Generate Prisma client (auth-service)
         run: npm run prisma:auth:generate
 
-      - name: Check DB connection (auth_db)
-        run: echo "SELECT 1;" | npx prisma db execute --stdin --schema=apps/auth-service/prisma/schema.prisma
+      # Áp dụng migration lên DB trống của CI rồi so DB với schema.prisma: sửa schema mà
+      # quên tạo migration -> migrate diff thoát mã 2, CI đỏ
+      - name: Apply migrations + check schema drift (auth_db)
+        run: |
+          npx prisma migrate deploy --schema=apps/auth-service/prisma/schema.prisma
+          npx prisma migrate diff --exit-code \
+            --from-schema-datasource apps/auth-service/prisma/schema.prisma \
+            --to-schema-datamodel apps/auth-service/prisma/schema.prisma
+
+      - name: Generate Prisma client (task-service)
+        run: npm run prisma:task:generate
+
+      # Áp dụng migration lên DB trống của CI rồi so DB với schema.prisma: sửa schema mà
+      # quên tạo migration -> migrate diff thoát mã 2, CI đỏ
+      - name: Apply migrations + check schema drift (task_db)
+        run: |
+          npx prisma migrate deploy --schema=apps/task-service/prisma/schema.prisma
+          npx prisma migrate diff --exit-code \
+            --from-schema-datasource apps/task-service/prisma/schema.prisma \
+            --to-schema-datamodel apps/task-service/prisma/schema.prisma
 
       - name: Lint
         run: npm run lint
