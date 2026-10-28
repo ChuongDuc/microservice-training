@@ -12,7 +12,7 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
-    # Postgres phục vụ generate Prisma + kiểm tra kết nối DB
+    # Postgres: generate Prisma, migrate, e2e. Redis: refresh token (e2e auth/gateway)
     services:
       postgres:
         image: postgres:16-alpine
@@ -26,11 +26,25 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       USER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/user_db?schema=public
       AUTH_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/auth_db?schema=public
       TASK_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/task_db?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      # Secret chỉ dùng cho e2e trên CI (không có .env), không dùng ở môi trường nào khác
+      JWT_ACCESS_SECRET: ci-only-access-secret-5f1d8c0e2b9a4e7d93c6
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-a83b47e1c0d2f6958e1b
 
     steps:
       - name: Checkout
@@ -101,3 +115,13 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # E2E chạy service thật qua TCP/HTTP với Postgres + Redis của CI
+      - name: E2E User Service
+        run: npm run test:e2e:user
+
+      - name: E2E Auth Service
+        run: npm run test:e2e:auth
+
+      - name: E2E Gateway
+        run: npm run test:e2e:gateway

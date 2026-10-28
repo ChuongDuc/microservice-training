@@ -16,25 +16,25 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Nạp `ConfigModule` (global) vào cả 4 app
 - [x] Xác nhận: build sạch cả 4 app, hạ tầng Docker healthy, gateway trả HTTP 200
 
-## Giai đoạn 1 — User Service (service đầu tiên)
-- [ ] Chọn ORM (TypeORM hoặc Prisma) + kết nối `user_db`
-- [ ] Entity `User` (id, email, displayName, avatar, role, status, createdAt)
-- [ ] Chuyển User Service sang microservice mode (TCP transport)
+## Giai đoạn 1 — User Service (service đầu tiên) ✅ HOÀN TẤT
+- [x] Chọn ORM (Prisma) + kết nối `user_db`
+- [x] Entity `User` (id, email, displayName, avatar, role, status, createdAt)
+- [x] Chuyển User Service sang microservice mode (TCP transport)
 - [x] Message handler: `user.create`, `user.find_by_id`, `user.find_by_email`, `user.update`, `user.list`
-- [ ] Validation DTO (`class-validator`)
+- [x] Validation DTO (`class-validator`)
 
-## Giai đoạn 2 — Auth Service + Gateway (scope Bảo mật)
-- [ ] Kết nối `auth_db`, entity `Credential`, `RefreshToken`
+## Giai đoạn 2 — Auth Service + Gateway (scope Bảo mật) ✅ HOÀN TẤT
+- [x] Kết nối `auth_db`, entity `Credential` (refresh token lưu ở Redis)
 - [x] Hash mật khẩu (`argon2`)
 - [x] Đăng ký: Auth → gọi User Service (TCP) tạo user
 - [x] Đăng nhập: cấp access token (JWT) + refresh token
 - [x] Refresh token + rotation; đăng xuất (Redis)
-- [ ] Gateway: REST routes `/auth/*`, kết nối TCP client tới Auth/User
-- [ ] JWT Auth Guard ở Gateway
-- [ ] Identity propagation (truyền userId/role xuống service trong)
+- [x] Gateway: REST routes `/auth/*`, kết nối TCP client tới Auth/User
+- [x] JWT Auth Guard ở Gateway
+- [x] Identity propagation (truyền userId/role xuống service trong)
 
 ## Giai đoạn 3 — Task Service + Phân quyền (nghiệp vụ + Authorization)
-- [ ] Kết nối `task_db`, entity `Task`
+- [x] Kết nối `task_db`, entity `Task`
 - [ ] Message handler CRUD task; resource ownership (chỉ chủ task thao tác)
 - [ ] Gateway REST `/tasks` qua JWT Guard
 - [ ] RBAC: `@Roles()` + `RolesGuard`; endpoint admin `/admin/users`

@@ -2,6 +2,7 @@
 export * from './constants/services';
 export * from './constants/patterns';
 export * from './constants/jwt';
+export * from './config';
 export * from './dto/user';
 export * from './dto/auth';
 export * from './dto/identity';

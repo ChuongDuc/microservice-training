@@ -1,4 +1,8 @@
-import { createRpcValidationPipe, SERVICE_TCP_PORTS } from '@app/common';
+import {
+  assertJwtSecrets,
+  createRpcValidationPipe,
+  SERVICE_TCP_PORTS,
+} from '@app/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -11,6 +15,8 @@ async function bootstrap() {
   // Mặc định chỉ nghe localhost: service trong tin danh tính `{ user }` trong payload,
   // nên chỉ Gateway được gọi tới. Trong Docker đặt 0.0.0.0 và KHÔNG publish cổng ra ngoài.
   const host = process.env.AUTH_SERVICE_BIND_HOST ?? '127.0.0.1';
+  // Auth ký cả access lẫn refresh token: secret yếu/mẫu/trùng nhau -> không chạy
+  assertJwtSecrets(process.env, ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']);
 
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     AuthServiceModule,
