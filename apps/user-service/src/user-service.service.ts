@@ -1,12 +1,14 @@
 import {
   CreateUserDto,
+  isPrismaErrorCode,
   ListUsersDto,
   PaginatedResult,
+  rpcError,
   UpdateUserDto,
 } from '@app/common';
 import { Injectable } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
-import { Prisma, User } from '../generated/prisma';
+import { User } from '../generated/prisma';
 import { PrismaService } from './prisma/prisma.service';
 
 /**
@@ -23,7 +25,7 @@ export class UserServiceService {
       return await this.prisma.user.create({ data: dto });
     } catch (error) {
       // P2002: vi phạm ràng buộc unique (email đã tồn tại)
-      if (this.isPrismaError(error, 'P2002')) {
+      if (isPrismaErrorCode(error, 'P2002')) {
         throw new RpcException({
           statusCode: 409,
           message: `Email ${dto.email} đã tồn tại`,
@@ -50,7 +52,7 @@ export class UserServiceService {
       return await this.prisma.user.update({ where: { id }, data });
     } catch (error) {
       // P2025: không tìm thấy bản ghi cần update
-      if (this.isPrismaError(error, 'P2025')) throw this.notFound(`id ${id}`);
+      if (isPrismaErrorCode(error, 'P2025')) throw this.notFound(`id ${id}`);
       throw error;
     }
   }
@@ -61,7 +63,9 @@ export class UserServiceService {
       this.prisma.user.findMany({
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        // id làm tiêu chí phụ: user trùng createdAt vẫn có thứ tự cố định, phân trang
+        // không lặp/sót user giữa các trang
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.user.count(),
     ]);
@@ -69,16 +73,6 @@ export class UserServiceService {
   }
 
   private notFound(by: string): RpcException {
-    return new RpcException({
-      statusCode: 404,
-      message: `Không tìm thấy user với ${by}`,
-    });
-  }
-
-  private isPrismaError(error: unknown, code: string): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === code
-    );
+    return rpcError(404, `Không tìm thấy user với ${by}`);
   }
 }

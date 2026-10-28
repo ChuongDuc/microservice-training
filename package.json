@@ -21,6 +21,7 @@
     "test:e2e:gateway": "jest --config ./apps/gateway/test/jest-e2e.json --runInBand",
     "test:e2e:user": "jest --config ./apps/user-service/test/jest-e2e.json --runInBand",
     "test:e2e:auth": "jest --config ./apps/auth-service/test/jest-e2e.json --runInBand",
+    "test:e2e:task": "jest --config ./apps/task-service/test/jest-e2e.json --runInBand",
     "prisma:user:generate": "prisma generate --schema=apps/user-service/prisma/schema.prisma",
     "prisma:user:migrate": "prisma migrate dev --schema=apps/user-service/prisma/schema.prisma",
     "prisma:auth:generate": "prisma generate --schema=apps/auth-service/prisma/schema.prisma",
@@ -84,6 +85,9 @@
     ],
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",
+    "setupFiles": [
+      "reflect-metadata"
+    ],
     "roots": [
       "<rootDir>/apps/",
       "<rootDir>/libs/"

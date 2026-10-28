@@ -123,5 +123,8 @@ jobs:
       - name: E2E Auth Service
         run: npm run test:e2e:auth
 
+      - name: E2E Task Service
+        run: npm run test:e2e:task
+
       - name: E2E Gateway
         run: npm run test:e2e:gateway
