@@ -50,4 +50,9 @@ describe('UserServiceController', () => {
     await controller.list({ page: 2, limit: 5 });
     expect(service.list).toHaveBeenCalledWith({ page: 2, limit: 5 });
   });
+
+  it('user.find_me -> service.findById(user.userId) từ danh tính người gọi', async () => {
+    await controller.findMe({ user: { userId: 'uuid', role: 'USER' } });
+    expect(service.findById).toHaveBeenCalledWith('uuid');
+  });
 });

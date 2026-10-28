@@ -1,4 +1,5 @@
 import {
+  AuthenticatedPayloadDto,
   CreateUserDto,
   FindUserByEmailDto,
   FindUserByIdDto,
@@ -41,5 +42,11 @@ export class UserServiceController {
   @MessagePattern(USER_PATTERNS.LIST)
   list(@Payload() dto: ListUsersDto) {
     return this.userService.list(dto);
+  }
+
+  /** Hồ sơ của người gọi: id lấy từ danh tính Gateway truyền xuống, không từ client. */
+  @MessagePattern(USER_PATTERNS.FIND_ME)
+  findMe(@Payload() { user }: AuthenticatedPayloadDto) {
+    return this.userService.findById(user.userId);
   }
 }

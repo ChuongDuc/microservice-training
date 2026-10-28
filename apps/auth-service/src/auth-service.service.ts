@@ -1,5 +1,6 @@
 import {
   AuthTokens,
+  isUserRole,
   JWT_ALGORITHM,
   JwtPayload,
   LoginDto,
@@ -170,6 +171,16 @@ export class AuthServiceService {
       throw new RpcException({
         statusCode: 403,
         message: 'Tài khoản đã bị khoá',
+      });
+    }
+
+    // Role lạ (vd: thêm vào schema Prisma mà quên USER_ROLES) -> báo lỗi ngay khi
+    // đăng nhập, không cấp token mà Gateway sẽ từ chối ở mọi request
+    if (!isUserRole(user.role)) {
+      this.logger.error(`User ${user.id} có role không hợp lệ: ${user.role}`);
+      throw new RpcException({
+        statusCode: 500,
+        message: 'Role của tài khoản không hợp lệ',
       });
     }
 

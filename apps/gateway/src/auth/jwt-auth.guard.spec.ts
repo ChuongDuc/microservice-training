@@ -8,6 +8,7 @@ import { IS_PUBLIC_KEY } from './public.decorator';
 
 describe('JwtAuthGuard', () => {
   const SECRET = 'access-secret';
+  const USER_ID = '3f1c9a52-6b0e-4d8a-9c1e-2a7b5d4e8f10';
   const jwt = new JwtService();
   const reflector = new Reflector();
   const config = {
@@ -57,17 +58,17 @@ describe('JwtAuthGuard', () => {
     ).resolves.toBe(true);
   });
 
-  it('access token hợp lệ -> cho qua, gắn { sub, role } vào request.user', async () => {
-    const token = await sign({ sub: 'user-1', role: 'ADMIN', extra: 'x' });
+  it('access token hợp lệ -> cho qua, gắn { userId, role } vào request.user', async () => {
+    const token = await sign({ sub: USER_ID, role: 'ADMIN', extra: 'x' });
     const { context, request, response } = contextOf(`Bearer ${token}`);
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(request.user).toEqual({ sub: 'user-1', role: 'ADMIN' });
+    expect(request.user).toEqual({ userId: USER_ID, role: 'ADMIN' });
     expect(response.setHeader).not.toHaveBeenCalled();
   });
 
   it('chấp nhận "bearer" viết thường và khoảng trắng thừa', async () => {
-    const token = await sign({ sub: 'user-1', role: 'USER' });
+    const token = await sign({ sub: USER_ID, role: 'USER' });
 
     await expect(
       guard.canActivate(contextOf(`  bearer   ${token} `).context),
@@ -107,7 +108,7 @@ describe('JwtAuthGuard', () => {
 
   it('token ký bằng secret khác (vd: refresh token) -> 401 invalid_token', async () => {
     const token = await sign(
-      { sub: 'user-1', role: 'USER' },
+      { sub: USER_ID, role: 'USER' },
       { secret: 'refresh-secret' },
     );
     await expect(reject(`Bearer ${token}`)).resolves.toEqual(invalid);
@@ -116,7 +117,7 @@ describe('JwtAuthGuard', () => {
   it('token hết hạn -> 401 invalid_token', async () => {
     // expiresIn âm: token đã hết hạn 10 giây trước
     const token = await sign(
-      { sub: 'user-1', role: 'USER' },
+      { sub: USER_ID, role: 'USER' },
       { expiresIn: -10 },
     );
     await expect(reject(`Bearer ${token}`)).resolves.toEqual(invalid);
@@ -124,7 +125,7 @@ describe('JwtAuthGuard', () => {
 
   it('token đúng secret nhưng không có exp (không bao giờ hết hạn) -> 401', async () => {
     const token = await jwt.signAsync(
-      { sub: 'user-1', role: 'ADMIN' },
+      { sub: USER_ID, role: 'ADMIN' },
       { secret: SECRET },
     );
     expect(jwt.decode(token)).not.toHaveProperty('exp');
@@ -136,7 +137,7 @@ describe('JwtAuthGuard', () => {
     const encode = (o: object) =>
       Buffer.from(JSON.stringify(o)).toString('base64url');
     const token = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({
-      sub: 'user-1',
+      sub: USER_ID,
       role: 'ADMIN',
       exp: Math.floor(Date.now() / 1000) + 900,
     })}.`;
@@ -145,14 +146,20 @@ describe('JwtAuthGuard', () => {
 
   it('token đúng secret nhưng ký bằng HS512 -> 401', async () => {
     const token = await sign(
-      { sub: 'user-1', role: 'USER' },
+      { sub: USER_ID, role: 'USER' },
       { algorithm: 'HS512' },
     );
     await expect(reject(`Bearer ${token}`)).resolves.toEqual(invalid);
   });
 
-  it.each([{ sub: 'user-1' }, { role: 'USER' }, { sub: 1, role: 'USER' }])(
-    'token đúng secret nhưng thiếu/sai sub hoặc role (%p) -> 401',
+  it.each([
+    { sub: USER_ID },
+    { role: 'USER' },
+    { sub: 1, role: 'USER' },
+    { sub: USER_ID, role: 'SUPERADMIN' },
+    { sub: 'user-1', role: 'USER' },
+  ])(
+    'token đúng secret nhưng thiếu/sai sub (phải là UUID) hoặc role không hợp lệ (%p) -> 401',
     async (payload) => {
       const token = await sign(payload);
       await expect(reject(`Bearer ${token}`)).resolves.toEqual(invalid);

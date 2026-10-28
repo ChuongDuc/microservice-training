@@ -16,6 +16,8 @@ export const USER_PATTERNS = {
   FIND_BY_EMAIL: 'user.find_by_email',
   UPDATE: 'user.update',
   LIST: 'user.list',
+  /** Hồ sơ của chính người gọi (payload kèm danh tính từ Gateway). */
+  FIND_ME: 'user.find_me',
 } as const;
 
 export const TASK_PATTERNS = {

@@ -1,4 +1,5 @@
 import { JWT_ALGORITHM, USER_PATTERNS, USER_SERVICE } from '@app/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { RpcException } from '@nestjs/microservices';
@@ -255,6 +256,16 @@ describe('AuthServiceService', () => {
 
       await expect(rpcError(service.login(loginDto))).resolves.toMatchObject({
         statusCode: 403,
+      });
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('role không nằm trong USER_ROLES -> 500, không cấp token', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      userClient.send.mockReturnValue(of({ ...user, role: 'MODERATOR' }));
+
+      await expect(rpcError(service.login(loginDto))).resolves.toMatchObject({
+        statusCode: 500,
       });
       expect(redis.set).not.toHaveBeenCalled();
     });

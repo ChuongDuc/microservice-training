@@ -1,7 +1,7 @@
 import {
   AUTH_PATTERNS,
   AUTH_SERVICE,
-  JwtPayload,
+  AuthUserDto,
   LoginDto,
   RefreshTokenDto,
   RegisterDto,
@@ -50,8 +50,8 @@ export class AuthController {
 
   /** Danh tính lấy từ access token (đã verify ở JwtAuthGuard), không gọi service nào. */
   @Get('me')
-  me(@CurrentUser() user: JwtPayload) {
-    return { userId: user.sub, role: user.role };
+  me(@CurrentUser() user: AuthUserDto) {
+    return user;
   }
 
   private send(pattern: string, payload: unknown) {

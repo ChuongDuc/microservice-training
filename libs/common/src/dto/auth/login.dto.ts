@@ -1,3 +1,4 @@
+import { UserRole } from '../identity/authenticated-payload.dto';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
@@ -26,5 +27,5 @@ export interface AuthTokens {
 /** Nội dung (payload) của access token. `sub` là userId. */
 export interface JwtPayload {
   sub: string;
-  role: string;
+  role: UserRole;
 }
