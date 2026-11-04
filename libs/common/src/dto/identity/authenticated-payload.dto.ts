@@ -1,6 +1,12 @@
 import { Type as NestType } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsDefined, IsIn, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsDefined,
+  IsIn,
+  IsObject,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 
 /** Các role hợp lệ (đồng bộ với enum Role trong schema Prisma của User Service). */
 export const USER_ROLES = ['USER', 'ADMIN'] as const;
@@ -29,6 +35,8 @@ export class AuthUserDto {
  */
 export class AuthenticatedPayloadDto {
   @IsDefined()
+  // IsObject chặn mảng: @ValidateNested + @Type validate từng phần tử, `[]` sẽ lọt qua
+  @IsObject()
   @ValidateNested()
   @Type(() => AuthUserDto)
   user: AuthUserDto;
@@ -41,6 +49,8 @@ export class AuthenticatedPayloadDto {
 export function WithAuthUser<T>(DataDto: NestType<T>) {
   class PayloadWithData extends AuthenticatedPayloadDto {
     @IsDefined()
+    // IsObject chặn mảng: @ValidateNested + @Type validate từng phần tử, `[]` sẽ lọt qua
+    @IsObject()
     @ValidateNested()
     @Type(() => DataDto)
     data: T;

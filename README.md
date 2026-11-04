@@ -82,12 +82,22 @@ Mỗi service là một process riêng, mở mỗi service một terminal:
 npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định 4002)
 npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
 npm run start:dev task-service    # TCP, cổng TASK_SERVICE_PORT (mặc định 4003)
-npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service
+npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service (+ task-service cho /tasks)
 ```
 
-> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP; route REST `/tasks` ở Gateway làm ở #20.
+> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP.
 
-Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`).
+Route `/tasks` ở Gateway (cần access token, chỉ thao tác trên task của người gọi — task của người khác trả 404):
+
+| Method   | Route                         | Mô tả                                                                                                |
+| -------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `POST`   | `/tasks`                      | Tạo task (`title` bắt buộc; `description`, `status`, `priority`, `dueDate` ISO 8601 tuỳ chọn) -> 201 |
+| `GET`    | `/tasks?page=&limit=&status=` | Danh sách task của người gọi, mới nhất trước (`limit` tối đa 100)                                    |
+| `GET`    | `/tasks/:id`                  | Một task                                                                                             |
+| `PATCH`  | `/tasks/:id`                  | Sửa một phần (`description`/`dueDate: null` để xoá giá trị)                                          |
+| `DELETE` | `/tasks/:id`                  | Xoá, trả về task vừa xoá                                                                             |
+
+Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 4 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng (CI cũng chạy bước này).
 
 ## Test
 
@@ -104,8 +114,9 @@ npm run test:e2e:user
 npm run test:e2e:auth
 npm run test:e2e:task
 
-# E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*.
-# Cần Postgres (đã migrate user_db + auth_db) và Redis đang chạy.
+# E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*;
+# bật Task Service thật (TCP, cổng 4213) và gọi REST /tasks.
+# Cần Postgres (đã migrate user_db + auth_db + task_db) và Redis đang chạy.
 npm run test:e2e:gateway
 ```
 

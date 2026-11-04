@@ -1,3 +1,6 @@
+// Nạp trước mọi import: decorator của class-transformer (DTO trong @app/common)
+// gọi Reflect.getMetadata ngay khi file được nạp, trước khi @nestjs/core kịp nạp nó.
+import 'reflect-metadata';
 import { createRpcValidationPipe, SERVICE_TCP_PORTS } from '@app/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
