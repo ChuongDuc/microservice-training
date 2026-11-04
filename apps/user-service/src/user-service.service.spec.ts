@@ -124,7 +124,7 @@ describe('UserServiceService', () => {
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         skip: 10,
         take: 5,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
     });
   });

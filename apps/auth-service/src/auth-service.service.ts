@@ -1,5 +1,6 @@
 import {
   AuthTokens,
+  isPrismaErrorCode,
   isUserRole,
   JWT_ALGORITHM,
   JwtPayload,
@@ -16,7 +17,6 @@ import { ClientProxy, RpcException } from '@nestjs/microservices';
 import * as argon2 from 'argon2';
 import { createHash, randomUUID } from 'crypto';
 import { firstValueFrom, timeout } from 'rxjs';
-import { Prisma } from '../generated/prisma';
 import { PrismaService } from './prisma/prisma.service';
 import { RedisService } from './redis/redis.service';
 
@@ -95,7 +95,7 @@ export class AuthServiceService {
         `Đã tạo user ${user.id} nhưng lưu credential thất bại`,
         error instanceof Error ? error.stack : String(error),
       );
-      if (this.isPrismaError(error, 'P2002')) throw this.emailConflict(email);
+      if (isPrismaErrorCode(error, 'P2002')) throw this.emailConflict(email);
       throw error;
     }
 
@@ -343,13 +343,6 @@ export class AuthServiceService {
       typeof error === 'object' &&
       error !== null &&
       typeof (error as { statusCode?: unknown }).statusCode === 'number'
-    );
-  }
-
-  private isPrismaError(error: unknown, code: string): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === code
     );
   }
 }

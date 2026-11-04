@@ -11,6 +11,8 @@ async function bootstrap() {
   assertJwtSecrets(process.env, ['JWT_ACCESS_SECRET']);
 
   const app = await NestFactory.create(GatewayModule);
+  // SIGTERM/SIGINT (vd: docker stop) -> chạy onModuleDestroy, đóng kết nối DB/Redis/TCP
+  app.enableShutdownHooks();
   await app.listen(port);
   Logger.log(`Gateway (HTTP) đang lắng nghe tại cổng ${port}`, 'Bootstrap');
 }

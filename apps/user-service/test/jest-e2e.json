@@ -3,6 +3,7 @@
   "rootDir": "../../..",
   "roots": ["<rootDir>/apps/user-service/test/"],
   "testEnvironment": "node",
+  "setupFiles": ["reflect-metadata"],
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.ts$": "ts-jest"

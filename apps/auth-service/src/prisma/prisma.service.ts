@@ -1,46 +1,16 @@
-import {
-  INestApplication,
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { withPrismaLifecycle } from '@app/common';
+import { Injectable } from '@nestjs/common';
 // Client được generate riêng cho AUTH SERVICE (xem prisma/schema.prisma -> output).
 import { PrismaClient } from '../../generated/prisma';
 
 /**
- * PrismaService quản lý kết nối tới database của AUTH SERVICE.
- *
- * - extends PrismaClient: kế thừa toàn bộ query API (this.credential, this.$transaction, ...).
- * - OnModuleInit: mở kết nối khi module khởi động (fail-fast nếu DB không sẵn sàng).
- * - OnModuleDestroy: đóng kết nối khi ứng dụng tắt để tránh rò rỉ connection.
+ * Kết nối tới auth_db của AUTH SERVICE: toàn bộ query API của PrismaClient + lifecycle
+ * mở/đóng kết nối dùng chung (withPrismaLifecycle trong @app/common).
  *
  * Inject vào provider khác bằng constructor: `constructor(private prisma: PrismaService) {}`.
  */
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
-  private readonly logger = new Logger(PrismaService.name);
-
-  async onModuleInit(): Promise<void> {
-    await this.$connect();
-    this.logger.log('Đã kết nối tới auth_db');
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.$disconnect();
-    this.logger.log('Đã đóng kết nối tới auth_db');
-  }
-
-  /**
-   * Đóng ứng dụng Nest một cách an toàn (graceful shutdown) khi tiến trình nhận
-   * tín hiệu tắt từ Prisma. Gọi trong bootstrap khi cần: `prisma.enableShutdownHooks(app)`.
-   */
-  async enableShutdownHooks(app: INestApplication): Promise<void> {
-    process.on('beforeExit', () => {
-      void app.close();
-    });
-  }
-}
+export class PrismaService extends withPrismaLifecycle(
+  PrismaClient,
+  'auth_db',
+) {}
