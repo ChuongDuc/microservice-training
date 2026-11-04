@@ -11,7 +11,8 @@ import { TaskServiceService } from './task-service.service';
 
 /**
  * Nhận message TCP cho Task Service. Payload `{ user, data }` (danh tính người gọi do
- * Gateway truyền xuống) được validate bởi createRpcValidationPipe() theo DTO.
+ * Gateway truyền xuống) được validate bởi createRpcValidationPipe() theo DTO. Mọi
+ * handler chuyển `user` xuống service để chỉ thao tác trên task của người gọi.
  */
 @Controller()
 export class TaskServiceController {
@@ -23,22 +24,22 @@ export class TaskServiceController {
   }
 
   @MessagePattern(TASK_PATTERNS.FIND_ALL)
-  findAll(@Payload() { data }: ListTasksPayloadDto) {
-    return this.taskService.findAll(data);
+  findAll(@Payload() { user, data }: ListTasksPayloadDto) {
+    return this.taskService.findAll(user, data);
   }
 
   @MessagePattern(TASK_PATTERNS.FIND_ONE)
-  findOne(@Payload() { data }: TaskIdPayloadDto) {
-    return this.taskService.findOne(data.id);
+  findOne(@Payload() { user, data }: TaskIdPayloadDto) {
+    return this.taskService.findOne(user, data.id);
   }
 
   @MessagePattern(TASK_PATTERNS.UPDATE)
-  update(@Payload() { data }: UpdateTaskPayloadDto) {
-    return this.taskService.update(data);
+  update(@Payload() { user, data }: UpdateTaskPayloadDto) {
+    return this.taskService.update(user, data);
   }
 
   @MessagePattern(TASK_PATTERNS.DELETE)
-  remove(@Payload() { data }: TaskIdPayloadDto) {
-    return this.taskService.remove(data.id);
+  remove(@Payload() { user, data }: TaskIdPayloadDto) {
+    return this.taskService.remove(user, data.id);
   }
 }
