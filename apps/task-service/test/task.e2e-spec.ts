@@ -262,4 +262,112 @@ describe('Task Service (e2e qua TCP)', () => {
       ).resolves.toMatchObject({ statusCode: 404 });
     });
   });
+
+  describe('Resource ownership: user B không truy cập được task của user A', () => {
+    const userA = newUser();
+    const userB = newUser();
+    let taskOfA: { id: string };
+    const notFound = { statusCode: 404 };
+
+    beforeAll(async () => {
+      taskOfA = await createTask(
+        { title: 'task của A', description: 'bí mật' },
+        userA,
+      );
+      await createTask({ title: 'task của B' }, userB);
+    });
+
+    it('find_all chỉ trả task của người gọi, total không đếm task người khác', async () => {
+      const resultB = await send(TASK_PATTERNS.FIND_ALL, {
+        user: userB,
+        data: { limit: 100 },
+      });
+      expect(resultB.total).toBe(1);
+      expect(resultB.items).toEqual([
+        expect.objectContaining({ title: 'task của B', ownerId: userB.userId }),
+      ]);
+    });
+
+    it('find_all có lọc status vẫn chỉ trả task của người gọi', async () => {
+      // Cả A và B đều có task DONE: lọc status không được làm mất điều kiện chủ task
+      await createTask({ title: 'A xong', status: 'DONE' }, userA);
+      await createTask({ title: 'B xong', status: 'DONE' }, userB);
+
+      const resultB = await send(TASK_PATTERNS.FIND_ALL, {
+        user: userB,
+        data: { status: 'DONE', limit: 100 },
+      });
+      expect(resultB.total).toBe(1);
+      expect(resultB.items).toEqual([
+        expect.objectContaining({
+          title: 'B xong',
+          status: 'DONE',
+          ownerId: userB.userId,
+        }),
+      ]);
+    });
+
+    it('find_one task của A bằng danh tính B -> 404 (không lộ là task có tồn tại)', async () => {
+      const error = await sendError(TASK_PATTERNS.FIND_ONE, {
+        user: userB,
+        data: { id: taskOfA.id },
+      });
+      // Giống hệt lỗi của id không tồn tại
+      expect(error).toEqual({
+        statusCode: 404,
+        message: `Không tìm thấy task với id ${taskOfA.id}`,
+      });
+    });
+
+    it('update task của A bằng danh tính B -> 404, task của A không đổi', async () => {
+      await expect(
+        sendError(TASK_PATTERNS.UPDATE, {
+          user: userB,
+          data: { id: taskOfA.id, title: 'B sửa', status: 'DONE' },
+        }),
+      ).resolves.toMatchObject(notFound);
+
+      await expect(
+        prisma.task.findUnique({ where: { id: taskOfA.id } }),
+      ).resolves.toMatchObject({ title: 'task của A', status: 'TODO' });
+    });
+
+    it('delete task của A bằng danh tính B -> 404, task của A vẫn còn', async () => {
+      await expect(
+        sendError(TASK_PATTERNS.DELETE, {
+          user: userB,
+          data: { id: taskOfA.id },
+        }),
+      ).resolves.toMatchObject(notFound);
+
+      await expect(
+        prisma.task.findUnique({ where: { id: taskOfA.id } }),
+      ).resolves.not.toBeNull();
+    });
+
+    it('role ADMIN cũng chỉ thấy task của mình (quyền admin làm ở #21/#22)', async () => {
+      await expect(
+        sendError(TASK_PATTERNS.FIND_ONE, {
+          user: { ...userB, role: 'ADMIN' },
+          data: { id: taskOfA.id },
+        }),
+      ).resolves.toMatchObject(notFound);
+    });
+
+    it('chủ task (A) vẫn đọc/sửa/xoá được task của mình', async () => {
+      const payload = { user: userA, data: { id: taskOfA.id } };
+      await expect(
+        send(TASK_PATTERNS.FIND_ONE, payload),
+      ).resolves.toMatchObject({ description: 'bí mật' });
+      await expect(
+        send(TASK_PATTERNS.UPDATE, {
+          user: userA,
+          data: { id: taskOfA.id, status: 'DONE' },
+        }),
+      ).resolves.toMatchObject({ status: 'DONE' });
+      await expect(send(TASK_PATTERNS.DELETE, payload)).resolves.toMatchObject({
+        id: taskOfA.id,
+      });
+    });
+  });
 });
