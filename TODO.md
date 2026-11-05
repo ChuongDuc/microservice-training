@@ -36,7 +36,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 ## Giai đoạn 3 — Task Service + Phân quyền (nghiệp vụ + Authorization)
 - [x] Kết nối `task_db`, entity `Task`
 - [x] Message handler CRUD task; resource ownership (chỉ chủ task thao tác)
-- [ ] Gateway REST `/tasks` qua JWT Guard
+- [x] Gateway REST `/tasks` qua JWT Guard
 - [ ] RBAC: `@Roles()` + `RolesGuard`; endpoint admin `/admin/users`
 - [ ] Rate limiting (`@nestjs/throttler`) cho `/auth/login`
 - [ ] Global `ValidationPipe` + exception filter chuẩn hoá lỗi

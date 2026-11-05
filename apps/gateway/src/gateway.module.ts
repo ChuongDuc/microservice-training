@@ -1,4 +1,9 @@
-import { AUTH_SERVICE, SERVICE_TCP_PORTS, USER_SERVICE } from '@app/common';
+import {
+  AUTH_SERVICE,
+  SERVICE_TCP_PORTS,
+  TASK_SERVICE,
+  USER_SERVICE,
+} from '@app/common';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -6,6 +11,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
 
 /** Cấu hình TCP client tới một service, đọc host/port từ .env. */
@@ -29,11 +35,12 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     ClientsModule.registerAsync([
       tcpClient(AUTH_SERVICE, 'AUTH_SERVICE', SERVICE_TCP_PORTS.AUTH),
       tcpClient(USER_SERVICE, 'USER_SERVICE', SERVICE_TCP_PORTS.USER),
+      tcpClient(TASK_SERVICE, 'TASK_SERVICE', SERVICE_TCP_PORTS.TASK),
     ]),
     // Secret truyền khi verify (JwtAuthGuard), giống cách Auth Service ký token
     JwtModule.register({}),
   ],
-  controllers: [AuthController, UsersController],
+  controllers: [AuthController, UsersController, TasksController],
   providers: [
     // Mọi route cần access token, trừ route có @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },

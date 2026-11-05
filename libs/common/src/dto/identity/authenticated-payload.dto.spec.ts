@@ -35,6 +35,7 @@ describe('AuthenticatedPayloadDto', () => {
     ['thiếu role', { user: { userId: UUID } }],
     ['field lạ trong user', { user: { ...user, email: 'a@b.com' } }],
     ['field lạ ngoài user', { user, id: UUID }],
+    ['user là mảng', { user: [user] }],
   ])('từ chối: %s', async (_case, payload) => {
     await expect(
       pipe.transform(payload, meta(AuthenticatedPayloadDto)),
@@ -62,6 +63,10 @@ describe('WithAuthUser', () => {
     ['thiếu data', { user }],
     ['thiếu user', { data: { title: 'x' } }],
     ['data sai kiểu', { user, data: { title: 1 } }],
+    // @ValidateNested validate từng phần tử mảng: không có @IsObject thì lọt qua
+    ['data là mảng rỗng', { user, data: [] }],
+    ['data là mảng hợp lệ từng phần tử', { user, data: [{ title: 'x' }] }],
+    ['data là chuỗi', { user, data: 'x' }],
     [
       'field lạ trong data (ownerId)',
       { user, data: { title: 'x', ownerId: UUID } },

@@ -113,6 +113,12 @@ jobs:
             npx nest build "$app"
           done
 
+      # Chạy thử bản build (node dist/apps/*/main.js) tới khi nghe được cổng: bắt lỗi chỉ
+      # xảy ra khi chạy thật, vd thiếu import 'reflect-metadata' ở main.ts (jest nạp sẵn
+      # reflect-metadata qua setupFiles nên test không thấy)
+      - name: Smoke test bản build
+        run: npm run smoke:start
+
       - name: Test
         run: npm test
 
