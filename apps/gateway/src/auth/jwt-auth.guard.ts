@@ -17,6 +17,7 @@ import { isUUID } from 'class-validator';
 import { Response } from 'express';
 import { AuthenticatedRequest } from './current-user.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { ROLES_KEY } from './roles.decorator';
 
 /**
  * Giá trị header `WWW-Authenticate` theo RFC 6750: thiếu token thì chỉ báo scheme,
@@ -32,7 +33,7 @@ const WWW_AUTHENTICATE = {
 /**
  * Guard toàn cục: verify access token (`Authorization: Bearer <token>`) ngay tại
  * Gateway bằng JWT_ACCESS_SECRET, không gọi Auth Service. Hợp lệ thì gắn payload vào
- * `request.user`; thiếu/sai/hết hạn -> 401. Route có @Public() được bỏ qua.
+ * `request.user`; thiếu/sai/hết hạn -> 401. Route có @Public() được bỏ qua (trừ khi có @Roles()).
  *
  * Đánh đổi: không hỏi Auth/User nên tài khoản bị khoá/xoá hoặc đã logout vẫn dùng
  * được access token tới khi hết hạn (JWT_ACCESS_EXPIRES_IN, mặc định 15 phút).
@@ -51,11 +52,15 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) return true;
+    const targets = [context.getHandler(), context.getClass()];
+    const isPublic = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_KEY,
+      targets,
+    );
+    // Route có @Roles() luôn cần đăng nhập, kể cả khi lỡ gắn thêm @Public() (vd: ở
+    // controller @Roles('ADMIN')): bỏ qua token thì RolesGuard không có role để kiểm tra
+    const roles = this.reflector.getAllAndOverride<unknown>(ROLES_KEY, targets);
+    if (isPublic && !roles) return true;
 
     const http = context.switchToHttp();
     const request = http.getRequest<AuthenticatedRequest>();

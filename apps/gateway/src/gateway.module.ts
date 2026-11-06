@@ -11,6 +11,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
 import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
 
@@ -44,6 +45,9 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
   providers: [
     // Mọi route cần access token, trừ route có @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Sau JwtAuthGuard (guard toàn cục chạy theo thứ tự đăng ký): cần request.user
+    // đã có thì mới kiểm tra role của @Roles()
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class GatewayModule {}
