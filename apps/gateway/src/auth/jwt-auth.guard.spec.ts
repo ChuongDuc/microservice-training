@@ -1,3 +1,4 @@
+import { UserRole } from '@app/common';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -5,6 +6,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthenticatedRequest } from './current-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { ROLES_KEY } from './roles.decorator';
 
 describe('JwtAuthGuard', () => {
   const SECRET = 'access-secret';
@@ -19,12 +21,17 @@ describe('JwtAuthGuard', () => {
   const sign = (payload: object, options: object = {}) =>
     jwt.signAsync(payload, { secret: SECRET, expiresIn: '15m', ...options });
 
-  /** ExecutionContext giả với header Authorization + metadata @Public() tuỳ chọn. */
-  const contextOf = (authorization?: string, isPublic = false) => {
+  /** ExecutionContext giả với header Authorization + metadata @Public()/@Roles() tuỳ chọn. */
+  const contextOf = (
+    authorization?: string,
+    isPublic = false,
+    roles?: UserRole[],
+  ) => {
     const request = { headers: { authorization } } as AuthenticatedRequest;
     const response = { setHeader: jest.fn() };
     const handler = () => undefined;
     if (isPublic) Reflect.defineMetadata(IS_PUBLIC_KEY, true, handler);
+    if (roles) Reflect.defineMetadata(ROLES_KEY, roles, handler);
     const context = {
       getHandler: () => handler,
       getClass: () => class {},
@@ -56,6 +63,20 @@ describe('JwtAuthGuard', () => {
     await expect(
       guard.canActivate(contextOf(undefined, true).context),
     ).resolves.toBe(true);
+  });
+
+  // @Public() + @Roles(): vẫn verify token, để RolesGuard có role mà kiểm tra
+  it('route @Public() có @Roles() -> vẫn cần token: thiếu token 401', async () => {
+    await expect(
+      guard.canActivate(contextOf(undefined, true, ['ADMIN']).context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('route @Public() có @Roles() + token hợp lệ -> gắn request.user', async () => {
+    const token = await sign({ sub: USER_ID, role: 'ADMIN' });
+    const { context, request } = contextOf(`Bearer ${token}`, true, ['ADMIN']);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.user).toEqual({ userId: USER_ID, role: 'ADMIN' });
   });
 
   it('access token hợp lệ -> cho qua, gắn { userId, role } vào request.user', async () => {
