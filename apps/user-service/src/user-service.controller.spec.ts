@@ -10,6 +10,9 @@ describe('UserServiceController', () => {
     findByEmail: jest.fn(),
     update: jest.fn(),
     list: jest.fn(),
+    adminList: jest.fn(),
+    updateRole: jest.fn(),
+    updateStatus: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -54,5 +57,27 @@ describe('UserServiceController', () => {
   it('user.find_me -> service.findById(user.userId) từ danh tính người gọi', async () => {
     await controller.findMe({ user: { userId: 'uuid', role: 'USER' } });
     expect(service.findById).toHaveBeenCalledWith('uuid');
+  });
+
+  describe('message admin chuyển { user, data } xuống service', () => {
+    const user = { userId: 'admin-uuid', role: 'ADMIN' as const };
+
+    it('user.admin.list -> service.adminList(user, data)', async () => {
+      const data = { page: 1, limit: 10, search: 'an' };
+      await controller.adminList({ user, data });
+      expect(service.adminList).toHaveBeenCalledWith(user, data);
+    });
+
+    it('user.admin.update_role -> service.updateRole(user, data)', async () => {
+      const data = { id: 'uuid', role: 'ADMIN' as const };
+      await controller.updateRole({ user, data });
+      expect(service.updateRole).toHaveBeenCalledWith(user, data);
+    });
+
+    it('user.admin.update_status -> service.updateStatus(user, data)', async () => {
+      const data = { id: 'uuid', status: 'BLOCKED' as const };
+      await controller.updateStatus({ user, data });
+      expect(service.updateStatus).toHaveBeenCalledWith(user, data);
+    });
   });
 });
