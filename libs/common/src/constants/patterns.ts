@@ -18,6 +18,10 @@ export const USER_PATTERNS = {
   LIST: 'user.list',
   /** Hồ sơ của chính người gọi (payload kèm danh tính từ Gateway). */
   FIND_ME: 'user.find_me',
+  // Chỉ ADMIN (Gateway chặn bằng @Roles, User Service kiểm tra lại role trong payload)
+  ADMIN_LIST: 'user.admin.list',
+  ADMIN_UPDATE_ROLE: 'user.admin.update_role',
+  ADMIN_UPDATE_STATUS: 'user.admin.update_status',
 } as const;
 
 export const TASK_PATTERNS = {

@@ -1,5 +1,5 @@
-import { USER_ROLES } from '@app/common';
-import { Role } from '../generated/prisma';
+import { USER_ROLES, USER_STATUSES } from '@app/common';
+import { Role, UserStatus } from '../generated/prisma';
 
 /**
  * USER_ROLES (@app/common) là bản sao của enum Role trong schema Prisma: Gateway chỉ
@@ -9,5 +9,12 @@ import { Role } from '../generated/prisma';
 describe('USER_ROLES khớp enum Role của Prisma', () => {
   it('cùng tập giá trị', () => {
     expect([...USER_ROLES].sort()).toEqual(Object.values(Role).sort());
+  });
+});
+
+/** USER_STATUSES dùng để validate bộ lọc/khoá tài khoản của admin. */
+describe('USER_STATUSES khớp enum UserStatus của Prisma', () => {
+  it('cùng tập giá trị', () => {
+    expect([...USER_STATUSES].sort()).toEqual(Object.values(UserStatus).sort());
   });
 });

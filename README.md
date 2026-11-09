@@ -99,6 +99,16 @@ Route `/tasks` ở Gateway (cần access token, chỉ thao tác trên task của
 | `PATCH`  | `/tasks/:id`                  | Sửa một phần (`description`/`dueDate: null` để xoá giá trị)                                          |
 | `DELETE` | `/tasks/:id`                  | Xoá, trả về task vừa xoá                                                                             |
 
+Route `/admin/users` (chỉ ADMIN — `@Roles('ADMIN')`, user thường -> 403; User Service cũng kiểm tra lại role):
+
+| Method  | Route                                             | Mô tả                                                                                  |
+| ------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `GET`   | `/admin/users?page=&limit=&search=&role=&status=` | Danh sách user, `search` tìm theo email hoặc tên hiển thị (không phân biệt hoa thường) |
+| `PATCH` | `/admin/users/:id/role`                           | Đổi role: `{ "role": ... }`, giá trị `USER` hoặc `ADMIN`                               |
+| `PATCH` | `/admin/users/:id/status`                         | Khoá / mở khoá: `{ "status": ... }`, giá trị `ACTIVE` hoặc `BLOCKED`                   |
+
+Admin không tự đổi role hay tự khoá chính mình được (400). User bị khoá không đăng nhập hay refresh được nữa (403); role mới và trạng thái khoá áp dụng cho access token cấp sau đó, token đang dùng giữ nguyên tới khi hết hạn. ADMIN đầu tiên cần đặt trực tiếp trong DB: `UPDATE "User" SET role = 'ADMIN' WHERE email = '...';` (user_db).
+
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 4 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng (CI cũng chạy bước này).
 
 ## Test

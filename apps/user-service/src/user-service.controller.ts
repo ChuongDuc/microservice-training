@@ -1,10 +1,13 @@
 import {
+  AdminListUsersPayloadDto,
   AuthenticatedPayloadDto,
   CreateUserDto,
   FindUserByEmailDto,
   FindUserByIdDto,
   ListUsersDto,
   UpdateUserPayloadDto,
+  UpdateUserRolePayloadDto,
+  UpdateUserStatusPayloadDto,
   USER_PATTERNS,
 } from '@app/common';
 import { Controller } from '@nestjs/common';
@@ -48,5 +51,21 @@ export class UserServiceController {
   @MessagePattern(USER_PATTERNS.FIND_ME)
   findMe(@Payload() { user }: AuthenticatedPayloadDto) {
     return this.userService.findById(user.userId);
+  }
+
+  // Message admin: payload `{ user, data }`, service kiểm tra lại user.role === ADMIN
+  @MessagePattern(USER_PATTERNS.ADMIN_LIST)
+  adminList(@Payload() { user, data }: AdminListUsersPayloadDto) {
+    return this.userService.adminList(user, data);
+  }
+
+  @MessagePattern(USER_PATTERNS.ADMIN_UPDATE_ROLE)
+  updateRole(@Payload() { user, data }: UpdateUserRolePayloadDto) {
+    return this.userService.updateRole(user, data);
+  }
+
+  @MessagePattern(USER_PATTERNS.ADMIN_UPDATE_STATUS)
+  updateStatus(@Payload() { user, data }: UpdateUserStatusPayloadDto) {
+    return this.userService.updateStatus(user, data);
   }
 }
