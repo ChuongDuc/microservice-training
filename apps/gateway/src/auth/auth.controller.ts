@@ -6,10 +6,20 @@ import {
   RefreshTokenDto,
   RegisterDto,
 } from '@app/common';
-import { Body, Controller, Get, HttpCode, Inject, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { SkipThrottle } from '@nestjs/throttler';
 import { sendRpc } from '../rpc/send-rpc';
 import { CurrentUser } from './current-user.decorator';
+import { AuthThrottlerGuard } from './login-throttle';
 import { Public } from './public.decorator';
 
 /**
@@ -21,13 +31,18 @@ import { Public } from './public.decorator';
 export class AuthController {
   constructor(@Inject(AUTH_SERVICE) private readonly authClient: ClientProxy) {}
 
+  /** Chỉ giới hạn theo IP: chặn dò email đã đăng ký và tạo tài khoản rác hàng loạt. */
   @Public()
+  @UseGuards(AuthThrottlerGuard)
+  @SkipThrottle({ default: true })
   @Post('register') // 201
   register(@Body() dto: RegisterDto) {
     return this.send(AUTH_PATTERNS.REGISTER, dto);
   }
 
+  /** Giới hạn theo IP + email và theo IP (chống dò mật khẩu), vượt ngưỡng -> 429. */
   @Public()
+  @UseGuards(AuthThrottlerGuard)
   @Post('login')
   @HttpCode(200)
   login(@Body() dto: LoginDto) {

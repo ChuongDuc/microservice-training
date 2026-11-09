@@ -9,9 +9,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { loginThrottleOptions } from './auth/login-throttle';
 import { RolesGuard } from './auth/roles.guard';
 import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
@@ -41,6 +43,17 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     ]),
     // Secret truyền khi verify (JwtAuthGuard), giống cách Auth Service ký token
     JwtModule.register({}),
+    // Bộ đếm cho ThrottlerGuard; chỉ route gắn @UseGuards(ThrottlerGuard) bị giới hạn
+    // (POST /auth/login, /auth/register), không đăng ký guard toàn cục
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        loginThrottleOptions({
+          LOGIN_THROTTLE_LIMIT: config.get('LOGIN_THROTTLE_LIMIT'),
+          LOGIN_THROTTLE_IP_LIMIT: config.get('LOGIN_THROTTLE_IP_LIMIT'),
+          LOGIN_THROTTLE_TTL_MS: config.get('LOGIN_THROTTLE_TTL_MS'),
+        }),
+    }),
   ],
   controllers: [
     AuthController,

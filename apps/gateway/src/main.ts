@@ -4,7 +4,9 @@ import 'reflect-metadata';
 import { assertJwtSecrets } from '@app/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { GatewayModule } from './gateway.module';
+import { applyTrustProxy } from './http/trust-proxy';
 
 async function bootstrap() {
   // ConfigModule.forRoot() trong GatewayModule đã nạp .env vào process.env
@@ -13,7 +15,9 @@ async function bootstrap() {
   // Gateway verify access token: secret yếu/mẫu thì ai cũng tự ký được token -> không chạy
   assertJwtSecrets(process.env, ['JWT_ACCESS_SECRET']);
 
-  const app = await NestFactory.create(GatewayModule);
+  const app = await NestFactory.create<NestExpressApplication>(GatewayModule);
+  // IP client thật khi đứng sau proxy (giới hạn đăng nhập đếm theo IP)
+  applyTrustProxy(app, process.env.TRUST_PROXY);
   // SIGTERM/SIGINT (vd: docker stop) -> chạy onModuleDestroy, đóng kết nối DB/Redis/TCP
   app.enableShutdownHooks();
   await app.listen(port);

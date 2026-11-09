@@ -38,7 +38,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Message handler CRUD task; resource ownership (chỉ chủ task thao tác)
 - [x] Gateway REST `/tasks` qua JWT Guard
 - [x] RBAC: `@Roles()` + `RolesGuard`; endpoint admin `/admin/users`
-- [ ] Rate limiting (`@nestjs/throttler`) cho `/auth/login`
+- [x] Rate limiting (`@nestjs/throttler`) cho `/auth/login`
 - [ ] Global `ValidationPipe` + exception filter chuẩn hoá lỗi
 
 ## Giai đoạn 4 — Nâng cao (nếu còn thời gian)
