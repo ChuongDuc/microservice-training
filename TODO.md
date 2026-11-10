@@ -42,7 +42,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Global `ValidationPipe` + exception filter chuẩn hoá lỗi
 
 ## Giai đoạn 4 — Nâng cao (nếu còn thời gian)
-- [ ] Notification Service + kết nối RabbitMQ (lắng nghe event)
+- [x] Notification Service + kết nối RabbitMQ (lắng nghe event)
 - [ ] Task/User phát event async (`task.created`, `user.registered`)
 - [ ] Xem danh sách thông báo theo user
 
@@ -66,6 +66,7 @@ npm run start:dev gateway
 npm run start:dev auth-service
 npm run start:dev user-service
 npm run start:dev task-service
+npm run start:dev notification-service
 
 # Build 1 app
 npx nest build gateway
