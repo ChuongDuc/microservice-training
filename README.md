@@ -2,7 +2,7 @@
 
 Dự án học tập: hệ thống quản lý công việc viết theo kiến trúc microservices, dùng **NestJS monorepo**.
 
-- **4 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`
+- **5 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`, `notification-service` (nhận event qua RabbitMQ)
 - **Thư viện dùng chung** `@app/common` trong `libs/common` (constants, message patterns, pipe...)
 - **Giao tiếp**: TCP (đồng bộ, giữa Gateway và các service) + RabbitMQ (bất đồng bộ, event)
 - **Hạ tầng** (Docker): PostgreSQL (mỗi service một DB: `auth_db`, `user_db`, `task_db`), Redis, RabbitMQ
@@ -83,9 +83,14 @@ npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định
 npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
 npm run start:dev task-service    # TCP, cổng TASK_SERVICE_PORT (mặc định 4003)
 npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service (+ task-service cho /tasks)
+npm run start:dev notification-service  # RabbitMQ, queue RABBITMQ_QUEUE (mặc định notifications_queue)
 ```
 
 > `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP.
+
+`notification-service` không mở cổng: nó nhận event bất đồng bộ (`@EventPattern`) từ queue `RABBITMQ_QUEUE` (kết nối theo `RABBITMQ_USER/PASSWORD/HOST/PORT`). Event hiện có: `user.registered`, `task.created` (tên + payload ở `NOTIFICATION_EVENTS` và `libs/common/src/dto/events`). Queue `durable` + message `persistent`, ack thủ công: message chỉ bị xoá khỏi queue khi xử lý xong, service tắt thì event nằm chờ trong queue. Payload sai, handler lỗi hoặc event không có handler -> message chuyển vào dead-letter queue `<queue>.dlq` (không giao lại ngay, tránh lặp vô hạn) và ghi log một lần; xem/đưa lại message trong DLQ qua giao diện quản trị RabbitMQ (shovel hoặc Move messages). Giao "ít nhất một lần": mỗi event có `eventId` (UUID) để phía nhận chống xử lý trùng.
+
+> Đã từng chạy `notification-service` trước khi có DLQ: queue `notifications_queue` cũ khai báo khác (thiếu dead-letter) nên RabbitMQ từ chối (`PRECONDITION_FAILED`). Xoá queue cũ một lần: `docker compose exec rabbitmq rabbitmqctl delete_queue notifications_queue`.
 
 Chống dò mật khẩu (`@nestjs/throttler`), vượt ngưỡng -> 429 kèm header `Retry-After` (giây):
 
@@ -123,7 +128,7 @@ Admin không tự đổi role hay tự khoá chính mình được (400). User b
 
 `errors` chỉ có với lỗi validate. Body/query được validate ngay ở Gateway (`ValidationPipe` toàn cục: bỏ qua field không khai báo trong DTO, gửi field lạ -> 400), service phía trong validate lại payload. Lỗi không lường trước trả `500 Internal server error` và chỉ ghi chi tiết vào log.
 
-Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 4 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng (CI cũng chạy bước này).
+Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 5 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng — riêng `notification-service` chờ log đã kết nối RabbitMQ, nên cần RabbitMQ đang chạy (CI cũng chạy bước này).
 
 ## Test
 
@@ -144,6 +149,10 @@ npm run test:e2e:task
 # bật Task Service thật (TCP, cổng 4213) và gọi REST /tasks.
 # Cần Postgres (đã migrate user_db + auth_db + task_db) và Redis đang chạy.
 npm run test:e2e:gateway
+
+# E2E Notification Service: bật service thật, phát event qua RabbitMQ (queue riêng cho
+# mỗi lần chạy, xoá khi xong). Cần RabbitMQ đang chạy.
+npm run test:e2e:notification
 ```
 
 ## Cấu trúc thư mục
@@ -154,6 +163,7 @@ apps/
   auth-service/    # Đăng ký, đăng nhập, JWT, refresh token
   user-service/    # Quản lý user (Prisma + TCP)
   task-service/    # Quản lý task
+  notification-service/ # Nhận event qua RabbitMQ (user.registered, task.created)
 libs/
   common/          # @app/common: constants, message patterns, pipe dùng chung
 docker/            # Script khởi tạo Postgres

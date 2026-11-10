@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ValidationError,
   ValidationPipe,
+  ValidationPipeOptions,
 } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 
@@ -53,10 +54,16 @@ export const VALIDATION_PIPE_OPTIONS = {
  * ValidationPipe dùng cho các microservice (TCP).
  * Mặc định ValidationPipe ném BadRequestException (lỗi HTTP) — qua TCP phía gọi chỉ nhận
  * "Internal server error". Đổi sang RpcException để trả về đủ statusCode + chi tiết lỗi.
+ *
+ * `overrides`: vd Notification Service nhận event với `forbidNonWhitelisted: false` —
+ * phía phát thêm field mới vào event thì field đó bị bỏ qua thay vì làm mất cả event.
  */
-export function createRpcValidationPipe(): ValidationPipe {
+export function createRpcValidationPipe(
+  overrides: Pick<ValidationPipeOptions, 'forbidNonWhitelisted'> = {},
+): ValidationPipe {
   return new ValidationPipe({
     ...VALIDATION_PIPE_OPTIONS,
+    ...overrides,
     exceptionFactory: (errors) => new RpcException(validationErrorBody(errors)),
   });
 }

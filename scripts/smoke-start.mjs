@@ -1,17 +1,55 @@
 // Smoke test bản build: chạy `node dist/apps/<app>/main.js` cho từng app và chờ app nghe
-// được cổng. Bắt các lỗi chỉ xảy ra khi chạy bản build thật (vd: thiếu
+// được cổng (Notification Service không mở cổng mà nhận event qua RabbitMQ: chờ tới khi
+// queue của nó có consumer). Bắt các lỗi chỉ xảy ra khi chạy bản build thật (vd: thiếu
 // `import 'reflect-metadata'` ở main.ts) mà jest không thấy vì đã nạp sẵn qua setupFiles.
-// Chạy sau `nest build` cho cả 4 app: `npm run smoke:start`.
+// Chạy sau `nest build` cho cả 5 app: `npm run smoke:start` (cần RabbitMQ đang chạy).
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
+import amqp from 'amqplib';
 
 const APPS = [
   { name: 'user-service', port: process.env.USER_SERVICE_PORT ?? 4002 },
   { name: 'auth-service', port: process.env.AUTH_SERVICE_PORT ?? 4001 },
   { name: 'task-service', port: process.env.TASK_SERVICE_PORT ?? 4003 },
   { name: 'gateway', port: process.env.GATEWAY_PORT ?? 3000 },
+  {
+    name: 'notification-service',
+    queue: process.env.RABBITMQ_QUEUE || 'notifications_queue',
+  },
 ];
 const TIMEOUT_MS = 30_000;
+
+// Cùng quy ước với rabbitmqUrl() trong libs/common/src/config/rabbitmq.ts
+const RABBITMQ_URL = `amqp://${encodeURIComponent(
+  process.env.RABBITMQ_USER || 'guest',
+)}:${encodeURIComponent(process.env.RABBITMQ_PASSWORD || 'guest')}@${
+  process.env.RABBITMQ_HOST || 'localhost'
+}:${process.env.RABBITMQ_PORT || '5672'}`;
+
+/** Số consumer đang gắn vào queue; 0 nếu queue chưa tồn tại hoặc không kết nối được. */
+async function consumerCount(queue) {
+  let connection;
+  try {
+    connection = await amqp.connect(RABBITMQ_URL);
+    // checkQueue lỗi (queue chưa có) sẽ đóng channel; dùng channel riêng mỗi lần
+    const channel = await connection.createChannel();
+    channel.on('error', () => {});
+    return (await channel.checkQueue(queue)).consumerCount;
+  } catch {
+    return 0;
+  } finally {
+    await connection?.close().catch(() => {});
+  }
+}
+
+/** App đã sẵn sàng: nghe được cổng, hoặc (app RabbitMQ) queue đã có consumer. */
+const isReady = (app) =>
+  app.queue
+    ? consumerCount(app.queue).then((n) => n > 0)
+    : isListening(app.port);
+
+/** Đã có tiến trình khác chiếm chỗ (cổng đang nghe / queue đã có consumer). */
+const isTaken = isReady;
 
 const isListening = (port) =>
   new Promise((resolve) => {
@@ -20,8 +58,13 @@ const isListening = (port) =>
     socket.once('error', () => resolve(false));
   });
 
-/** Khởi động một app, resolve khi app nghe được cổng; reject nếu app thoát hoặc quá hạn. */
-function start({ name, port }) {
+/**
+ * Khởi động một app, resolve khi app sẵn sàng (nghe được cổng / queue có consumer);
+ * reject nếu app thoát hoặc quá hạn.
+ */
+function start(app) {
+  const { name } = app;
+  const target = describe(app);
   const child = spawn(process.execPath, [`dist/apps/${name}/main.js`], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -33,31 +76,35 @@ function start({ name, port }) {
     const deadline = Date.now() + TIMEOUT_MS;
     child.once('exit', (code) =>
       reject(
-        new Error(`${name} thoát (mã ${code}) trước khi nghe cổng ${port}`),
+        new Error(`${name} thoát (mã ${code}) trước khi sẵn sàng (${target})`),
       ),
     );
     const poll = async () => {
       if (child.exitCode !== null) return;
-      if (await isListening(port)) return resolve();
+      if (await isReady(app)) return resolve();
       if (Date.now() > deadline)
         return reject(
-          new Error(`${name} không nghe cổng ${port} sau ${TIMEOUT_MS}ms`),
+          new Error(`${name} chưa sẵn sàng (${target}) sau ${TIMEOUT_MS}ms`),
         );
       setTimeout(poll, 300);
     };
     poll();
   });
-  return { name, port, child, ready, output: () => output };
+  return { name, child, ready, output: () => output };
+}
+
+function describe(app) {
+  return app.queue ? `consumer trên queue ${app.queue}` : `cổng ${app.port}`;
 }
 
 const running = [];
 let failed = false;
 for (const app of APPS) {
   // Cổng đã có tiến trình khác nghe thì kết quả "nghe được cổng" không chứng minh gì
-  if (await isListening(app.port)) {
+  if (await isTaken(app)) {
     failed = true;
     console.error(
-      `FAIL cổng ${app.port} của ${app.name} đã bị tiến trình khác dùng`,
+      `FAIL ${describe(app)} của ${app.name} đã bị tiến trình khác dùng`,
     );
     break;
   }
@@ -65,7 +112,7 @@ for (const app of APPS) {
   running.push(proc);
   try {
     await proc.ready;
-    console.log(`OK   ${app.name} nghe cổng ${app.port}`);
+    console.log(`OK   ${app.name} sẵn sàng (${describe(app)})`);
   } catch (error) {
     failed = true;
     console.error(`FAIL ${error.message}\n${proc.output()}`);
