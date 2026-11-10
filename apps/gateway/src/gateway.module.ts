@@ -1,12 +1,13 @@
 import {
   AUTH_SERVICE,
+  createHttpValidationPipe,
   SERVICE_TCP_PORTS,
   TASK_SERVICE,
   USER_SERVICE,
 } from '@app/common';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -15,6 +16,7 @@ import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { loginThrottleOptions } from './auth/login-throttle';
 import { RolesGuard } from './auth/roles.guard';
+import { AllHttpExceptionsFilter } from './http/http-exception.filter';
 import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
 
@@ -67,6 +69,11 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     // Sau JwtAuthGuard (guard toàn cục chạy theo thứ tự đăng ký): cần request.user
     // đã có thì mới kiểm tra role của @Roles()
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Validate body/query theo DTO ngay ở Gateway (whitelist + transform), lỗi 400 kèm
+    // chi tiết field. Service phía trong vẫn validate lại payload của chúng.
+    { provide: APP_PIPE, useFactory: createHttpValidationPipe },
+    // Mọi lỗi trả cho client theo dạng { statusCode, message, errors? }
+    { provide: APP_FILTER, useClass: AllHttpExceptionsFilter },
   ],
 })
 export class GatewayModule {}

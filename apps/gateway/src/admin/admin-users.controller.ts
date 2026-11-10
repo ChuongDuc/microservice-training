@@ -1,8 +1,8 @@
 import {
   AdminListUsersDto,
   AuthUserDto,
-  UpdateUserRoleDto,
-  UpdateUserStatusDto,
+  UpdateUserRoleBodyDto,
+  UpdateUserStatusBodyDto,
   USER_PATTERNS,
   USER_SERVICE,
 } from '@app/common';
@@ -22,8 +22,8 @@ import { sendRpc } from '../rpc/send-rpc';
 
 /**
  * REST `/admin/users` — chỉ ADMIN (RolesGuard, user thường -> 403). Forward xuống USER
- * SERVICE với payload `{ user, data }`; User Service kiểm tra lại role và validate
- * `data` (lỗi 400 kèm chi tiết field được trả nguyên về client).
+ * SERVICE với payload `{ user, data }`. Body/query được validate ở Gateway (ValidationPipe
+ * toàn cục); User Service kiểm tra lại role và validate lại `data`.
  */
 @Roles('ADMIN')
 @Controller('admin/users')
@@ -41,7 +41,7 @@ export class AdminUsersController {
   updateRole(
     @CurrentUser() user: AuthUserDto,
     @Param('id') id: string,
-    @Body() body: Omit<UpdateUserRoleDto, 'id'>,
+    @Body() body: UpdateUserRoleBodyDto,
   ) {
     // `id` trên URL ghi sau cùng: body có `id` cũng không đổi được user bị sửa
     return this.send(USER_PATTERNS.ADMIN_UPDATE_ROLE, user, { ...body, id });
@@ -52,7 +52,7 @@ export class AdminUsersController {
   updateStatus(
     @CurrentUser() user: AuthUserDto,
     @Param('id') id: string,
-    @Body() body: Omit<UpdateUserStatusDto, 'id'>,
+    @Body() body: UpdateUserStatusBodyDto,
   ) {
     return this.send(USER_PATTERNS.ADMIN_UPDATE_STATUS, user, { ...body, id });
   }

@@ -91,7 +91,6 @@ describe('RolesGuard (e2e)', () => {
     expect(res.body).toEqual({
       statusCode: 403,
       message: 'Bạn không có quyền truy cập tài nguyên này',
-      error: 'Forbidden',
     });
   });
 

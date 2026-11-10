@@ -160,7 +160,7 @@ describe('Gateway /tasks (e2e)', () => {
       });
     });
 
-    it('PATCH: `id` trong body không đổi được task bị sửa (id trên URL thắng)', async () => {
+    it('PATCH: `id` trong body -> 400, không đổi được task khác', async () => {
       const { body: other } = await a
         .post('/tasks')
         .send({ title: 'Task khác' })
@@ -169,8 +169,8 @@ describe('Gateway /tasks (e2e)', () => {
       const { body } = await a
         .patch(`/tasks/${taskId}`)
         .send({ id: other.id, title: 'Đổi tên' })
-        .expect(200);
-      expect(body).toMatchObject({ id: taskId, title: 'Đổi tên' });
+        .expect(400);
+      expect(body.errors).toEqual([expect.objectContaining({ field: 'id' })]);
       await expect(
         taskDb.task.findUnique({ where: { id: other.id } }),
       ).resolves.toMatchObject({ title: 'Task khác' });
@@ -191,17 +191,19 @@ describe('Gateway /tasks (e2e)', () => {
       a = await newCaller();
     });
 
-    it('body sai -> 400 kèm chi tiết field data.*', async () => {
+    it('body sai -> 400 ngay ở Gateway, field theo đúng body client gửi', async () => {
       const { body } = await a
         .post('/tasks')
         .send({ title: '', status: 'DOING' })
         .expect(400);
-      expect(body.errors).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ field: 'data.title' }),
-          expect.objectContaining({ field: 'data.status' }),
+      expect(body).toEqual({
+        statusCode: 400,
+        message: 'Validation failed',
+        errors: expect.arrayContaining([
+          expect.objectContaining({ field: 'title' }),
+          expect.objectContaining({ field: 'status' }),
         ]),
-      );
+      });
     });
 
     it('body tự chọn ownerId -> 400 (không được gán task cho người khác)', async () => {

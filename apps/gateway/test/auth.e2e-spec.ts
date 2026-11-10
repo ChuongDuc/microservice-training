@@ -132,7 +132,7 @@ describe('Gateway /auth/* (e2e)', () => {
       });
     });
 
-    it('body sai -> 400 kèm chi tiết field từ Auth Service', async () => {
+    it('body sai -> 400 kèm chi tiết field', async () => {
       const { body } = await post('/auth/register', {
         email: 'khong-phai-email',
         password: 'ngan',

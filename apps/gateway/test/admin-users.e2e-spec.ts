@@ -230,11 +230,12 @@ describe('Gateway /admin/users (e2e)', () => {
         .expect(404);
     });
 
-    it('`id` trong body không đổi được user bị sửa (id trên URL thắng)', async () => {
-      await as(admin.accessToken)
+    it('`id` trong body -> 400, không đổi được user khác', async () => {
+      const { body } = await as(admin.accessToken)
         .patch(`/admin/users/${member.id}/role`)
         .send({ role: 'USER', id: admin.id })
-        .expect(200);
+        .expect(400);
+      expect(body.errors).toEqual([expect.objectContaining({ field: 'id' })]);
       await expect(
         userDb.user.findUnique({ where: { id: admin.id } }),
       ).resolves.toMatchObject({ role: 'ADMIN' });

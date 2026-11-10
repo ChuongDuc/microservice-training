@@ -23,8 +23,8 @@ import { AuthThrottlerGuard } from './login-throttle';
 import { Public } from './public.decorator';
 
 /**
- * REST `/auth/*`: forward body xuống AUTH SERVICE qua TCP. Validate payload do Auth
- * Service đảm nhận (lỗi 400 kèm chi tiết field được trả nguyên về client).
+ * REST `/auth/*`: forward body xuống AUTH SERVICE qua TCP. Body được validate ở Gateway
+ * (ValidationPipe toàn cục, lỗi 400 kèm chi tiết field); Auth Service validate lại.
  * register/login/refresh/logout công khai (@Public); `/auth/me` cần access token.
  */
 @Controller('auth')

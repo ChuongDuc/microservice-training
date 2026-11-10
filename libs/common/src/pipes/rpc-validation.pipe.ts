@@ -1,4 +1,8 @@
-import { ValidationError, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ValidationError,
+  ValidationPipe,
+} from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 
 /** Một lỗi validate: `field` là đường dẫn đầy đủ (vd: `data.title`, `user.userId`). */
@@ -27,6 +31,24 @@ export function flattenValidationErrors(
   });
 }
 
+export const VALIDATION_FAILED_MESSAGE = 'Validation failed';
+
+/** Body lỗi validate (400) dùng chung cho Gateway (HTTP) và các service (TCP). */
+export function validationErrorBody(errors: ValidationError[]) {
+  return {
+    statusCode: 400,
+    message: VALIDATION_FAILED_MESSAGE,
+    errors: flattenValidationErrors(errors),
+  };
+}
+
+/** Tuỳ chọn ValidationPipe dùng chung cho Gateway và các service. */
+export const VALIDATION_PIPE_OPTIONS = {
+  whitelist: true, // bỏ field không khai báo trong DTO
+  forbidNonWhitelisted: true, // báo lỗi nếu gửi field lạ (vd: role, ownerId)
+  transform: true, // payload -> instance DTO
+} as const;
+
 /**
  * ValidationPipe dùng cho các microservice (TCP).
  * Mặc định ValidationPipe ném BadRequestException (lỗi HTTP) — qua TCP phía gọi chỉ nhận
@@ -34,14 +56,19 @@ export function flattenValidationErrors(
  */
 export function createRpcValidationPipe(): ValidationPipe {
   return new ValidationPipe({
-    whitelist: true, // bỏ field không khai báo trong DTO
-    forbidNonWhitelisted: true, // báo lỗi nếu gửi field lạ (vd: role)
-    transform: true, // payload -> instance DTO
+    ...VALIDATION_PIPE_OPTIONS,
+    exceptionFactory: (errors) => new RpcException(validationErrorBody(errors)),
+  });
+}
+
+/**
+ * ValidationPipe toàn cục của Gateway (HTTP): chặn request sai ngay ở cửa vào, không
+ * tốn một lượt gọi TCP. Lỗi 400 cùng dạng với lỗi validate của các service.
+ */
+export function createHttpValidationPipe(): ValidationPipe {
+  return new ValidationPipe({
+    ...VALIDATION_PIPE_OPTIONS,
     exceptionFactory: (errors) =>
-      new RpcException({
-        statusCode: 400,
-        message: 'Validation failed',
-        errors: flattenValidationErrors(errors),
-      }),
+      new BadRequestException(validationErrorBody(errors)),
   });
 }
