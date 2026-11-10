@@ -1,3 +1,4 @@
+import { OmitType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { USER_ROLES, UserRole, WithAuthUser } from '../identity';
@@ -52,6 +53,14 @@ export class UpdateUserStatusDto {
   @IsIn(USER_STATUSES)
   status: UserStatus;
 }
+
+// Body REST ở Gateway: `id` lấy từ URL, không nhận từ body
+export class UpdateUserRoleBodyDto extends OmitType(UpdateUserRoleDto, [
+  'id',
+] as const) {}
+export class UpdateUserStatusBodyDto extends OmitType(UpdateUserStatusDto, [
+  'id',
+] as const) {}
 
 // Payload các message admin: `{ user, data }`, User Service kiểm tra lại `user.role`.
 export class AdminListUsersPayloadDto extends WithAuthUser(AdminListUsersDto) {}

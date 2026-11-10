@@ -33,13 +33,13 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] JWT Auth Guard ở Gateway
 - [x] Identity propagation (truyền userId/role xuống service trong)
 
-## Giai đoạn 3 — Task Service + Phân quyền (nghiệp vụ + Authorization)
+## Giai đoạn 3 — Task Service + Phân quyền (nghiệp vụ + Authorization) ✅ HOÀN TẤT
 - [x] Kết nối `task_db`, entity `Task`
 - [x] Message handler CRUD task; resource ownership (chỉ chủ task thao tác)
 - [x] Gateway REST `/tasks` qua JWT Guard
 - [x] RBAC: `@Roles()` + `RolesGuard`; endpoint admin `/admin/users`
 - [x] Rate limiting (`@nestjs/throttler`) cho `/auth/login`
-- [ ] Global `ValidationPipe` + exception filter chuẩn hoá lỗi
+- [x] Global `ValidationPipe` + exception filter chuẩn hoá lỗi
 
 ## Giai đoạn 4 — Nâng cao (nếu còn thời gian)
 - [ ] Notification Service + kết nối RabbitMQ (lắng nghe event)

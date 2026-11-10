@@ -24,8 +24,9 @@ import { sendRpc } from '../rpc/send-rpc';
 /**
  * REST `/tasks` (cần access token): forward xuống TASK SERVICE qua TCP với payload
  * `{ user, data }`. `user` lấy từ token (JwtAuthGuard), không lấy từ body/query, nên
- * Task Service chỉ thao tác trên task của người gọi. Validate `data` do Task Service
- * đảm nhận (lỗi 400 kèm chi tiết field `data.*` được trả nguyên về client).
+ * Task Service chỉ thao tác trên task của người gọi. Body/query được validate ở Gateway
+ * (ValidationPipe toàn cục, lỗi 400 kèm chi tiết field); Task Service validate lại `data`
+ * và kiểm tra `id` (không phải UUID -> 400).
  */
 @Controller('tasks')
 export class TasksController {

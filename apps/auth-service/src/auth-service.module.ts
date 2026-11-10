@@ -1,5 +1,10 @@
-import { SERVICE_TCP_PORTS, USER_SERVICE } from '@app/common';
+import {
+  AllRpcExceptionsFilter,
+  SERVICE_TCP_PORTS,
+  USER_SERVICE,
+} from '@app/common';
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
@@ -33,6 +38,10 @@ import { RedisModule } from './redis/redis.module';
     ]),
   ],
   controllers: [AuthServiceController],
-  providers: [AuthServiceService],
+  providers: [
+    AuthServiceService,
+    // Mọi lỗi trả về phía gọi theo dạng thống nhất { statusCode, message, errors? }
+    { provide: APP_FILTER, useClass: AllRpcExceptionsFilter },
+  ],
 })
 export class AuthServiceModule {}

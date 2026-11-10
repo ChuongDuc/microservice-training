@@ -1,3 +1,4 @@
+import { isErrorStatusCode } from '@app/common';
 import { HttpException, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout, TimeoutError } from 'rxjs';
@@ -64,12 +65,10 @@ function isTransportError(error: unknown): boolean {
 
 /** Lỗi có statusCode là mã lỗi HTTP hợp lệ (400–599). */
 function hasErrorStatusCode(error: unknown): error is { statusCode: number } {
-  if (typeof error !== 'object' || error === null) return false;
-  const { statusCode } = error as { statusCode?: unknown };
   return (
-    Number.isInteger(statusCode) &&
-    (statusCode as number) >= 400 &&
-    (statusCode as number) <= 599
+    typeof error === 'object' &&
+    error !== null &&
+    isErrorStatusCode((error as { statusCode?: unknown }).statusCode)
   );
 }
 

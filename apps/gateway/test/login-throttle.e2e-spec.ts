@@ -101,11 +101,13 @@ describe('Giới hạn /auth/login, /auth/register (e2e)', () => {
   });
 
   it('route khác không bị giới hạn (refresh, route cần token)', async () => {
+    // Đúng dạng JWT để qua ValidationPipe của Gateway và tới được Auth Service
+    const refreshToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl';
     for (let i = 0; i < IP_LIMIT + 2; i++) {
       await request(gateway.getHttpServer())
         .post('/auth/refresh')
         .set('X-Forwarded-For', '10.0.0.6')
-        .send({ refreshToken: 'x' })
+        .send({ refreshToken })
         .expect(503); // tới được Auth Service (đang tắt), không bị 429
       await request(gateway.getHttpServer())
         .get('/auth/me')

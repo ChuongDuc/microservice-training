@@ -115,6 +115,14 @@ Route `/admin/users` (chỉ ADMIN — `@Roles('ADMIN')`, user thường -> 403; 
 
 Admin không tự đổi role hay tự khoá chính mình được (400). User bị khoá không đăng nhập hay refresh được nữa (403); role mới và trạng thái khoá áp dụng cho access token cấp sau đó, token đang dùng giữ nguyên tới khi hết hạn. ADMIN đầu tiên cần đặt trực tiếp trong DB: `UPDATE "User" SET role = 'ADMIN' WHERE email = '...';` (user_db).
 
+**Dạng lỗi thống nhất.** Mọi lỗi (từ Gateway hay từ service phía trong) trả về cùng một dạng:
+
+```json
+{ "statusCode": 400, "message": "Validation failed", "errors": [{ "field": "title", "constraints": { "isNotEmpty": "title should not be empty" } }] }
+```
+
+`errors` chỉ có với lỗi validate. Body/query được validate ngay ở Gateway (`ValidationPipe` toàn cục: bỏ qua field không khai báo trong DTO, gửi field lạ -> 400), service phía trong validate lại payload. Lỗi không lường trước trả `500 Internal server error` và chỉ ghi chi tiết vào log.
+
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 4 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng (CI cũng chạy bước này).
 
 ## Test
