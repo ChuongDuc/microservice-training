@@ -5,6 +5,8 @@ import {
   JWT_ALGORITHM,
   JwtPayload,
   LoginDto,
+  NOTIFICATION_EVENTS,
+  NotificationPublisher,
   RefreshTokenDto,
   RegisterDto,
   USER_PATTERNS,
@@ -58,11 +60,15 @@ export class AuthServiceService {
     @Inject(USER_SERVICE) private readonly userClient: ClientProxy,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationPublisher,
   ) {}
 
   /**
-   * Đăng ký: hash password → USER SERVICE tạo hồ sơ (user.create) → lưu Credential.
-   * Trả về hồ sơ user (không bao giờ trả password/hash).
+   * Đăng ký: hash password → USER SERVICE tạo hồ sơ (user.create) → lưu Credential →
+   * phát `user.registered`. Trả về hồ sơ user (không bao giờ trả password/hash).
+   *
+   * Event phát ở Auth (không phải User Service) vì chỉ Auth biết khi nào đăng ký xong
+   * hẳn: user.create thành công nhưng lưu credential lỗi thì không có ai đăng ký cả.
    */
   async register({
     email,
@@ -99,6 +105,11 @@ export class AuthServiceService {
       throw error;
     }
 
+    this.notifications.publish(NOTIFICATION_EVENTS.USER_REGISTERED, {
+      userId: user.id,
+      email: user.email,
+      displayName: user.displayName,
+    });
     return user;
   }
 

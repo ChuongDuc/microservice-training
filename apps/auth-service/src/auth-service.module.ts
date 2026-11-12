@@ -1,5 +1,6 @@
 import {
   AllRpcExceptionsFilter,
+  NotificationsPublisherModule,
   SERVICE_TCP_PORTS,
   USER_SERVICE,
 } from '@app/common';
@@ -18,6 +19,7 @@ import { RedisModule } from './redis/redis.module';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
     RedisModule, // lưu refresh token (hash) có TTL
+    NotificationsPublisherModule, // phát user.registered qua RabbitMQ
     // Secret/thời hạn truyền khi ký từng loại token (access/refresh dùng secret khác nhau)
     JwtModule.register({}),
     // TCP client tới USER SERVICE (dùng khi đăng ký để tạo hồ sơ user)

@@ -1,4 +1,7 @@
-import { AllRpcExceptionsFilter } from '@app/common';
+import {
+  AllRpcExceptionsFilter,
+  NotificationsPublisherModule,
+} from '@app/common';
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -10,6 +13,7 @@ import { TaskServiceService } from './task-service.service';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
+    NotificationsPublisherModule, // phát task.created qua RabbitMQ
   ],
   controllers: [TaskServiceController],
   providers: [

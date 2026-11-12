@@ -1,4 +1,10 @@
-import { JWT_ALGORITHM, USER_PATTERNS, USER_SERVICE } from '@app/common';
+import {
+  JWT_ALGORITHM,
+  NOTIFICATION_EVENTS,
+  NotificationPublisher,
+  USER_PATTERNS,
+  USER_SERVICE,
+} from '@app/common';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -55,6 +61,7 @@ describe('AuthServiceService', () => {
   };
   const jwt = new JwtService();
   const userClient = { send: jest.fn() };
+  const notifications = { publish: jest.fn() };
   const dto = { email: 'a@b.com', password: 'matkhau123', displayName: 'An' };
   const user = {
     id: 'uuid',
@@ -75,6 +82,7 @@ describe('AuthServiceService', () => {
         { provide: USER_SERVICE, useValue: userClient },
         { provide: JwtService, useValue: jwt },
         { provide: ConfigService, useValue: config },
+        { provide: NotificationPublisher, useValue: notifications },
       ],
     }).compile();
     service = module.get(AuthServiceService);
@@ -100,6 +108,22 @@ describe('AuthServiceService', () => {
       ).resolves.toBe(true);
     });
 
+    it('đăng ký xong -> phát user.registered (không kèm password)', async () => {
+      userClient.send.mockReturnValue(of(user));
+
+      await service.register(dto);
+
+      expect(notifications.publish).toHaveBeenCalledTimes(1);
+      expect(notifications.publish).toHaveBeenCalledWith(
+        NOTIFICATION_EVENTS.USER_REGISTERED,
+        { userId: user.id, email: user.email, displayName: user.displayName },
+      );
+      // Chỉ phát sau khi credential đã lưu
+      expect(prisma.credential.create.mock.invocationCallOrder[0]).toBeLessThan(
+        notifications.publish.mock.invocationCallOrder[0],
+      );
+    });
+
     it('email đã có credential -> 409, không gọi User Service', async () => {
       prisma.credential.findUnique.mockResolvedValue({ userId: 'x' });
 
@@ -107,6 +131,7 @@ describe('AuthServiceService', () => {
         statusCode: 409,
       });
       expect(userClient.send).not.toHaveBeenCalled();
+      expect(notifications.publish).not.toHaveBeenCalled();
     });
 
     it('chuyển tiếp lỗi nghiệp vụ từ User Service (409)', async () => {

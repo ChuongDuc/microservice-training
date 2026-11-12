@@ -1,4 +1,9 @@
-import { deadLetterQueue, notificationsQueue, rabbitmqUrl } from '@app/common';
+import {
+  deadLetterQueue,
+  notificationsQueue,
+  rabbitmqEnv,
+  rabbitmqUrl,
+} from '@app/common';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
@@ -17,13 +22,7 @@ export class DeadLetterQueueSetup implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
-    const env = {
-      RABBITMQ_USER: this.config.get<string>('RABBITMQ_USER'),
-      RABBITMQ_PASSWORD: this.config.get<string>('RABBITMQ_PASSWORD'),
-      RABBITMQ_HOST: this.config.get<string>('RABBITMQ_HOST'),
-      RABBITMQ_PORT: this.config.get<string>('RABBITMQ_PORT'),
-      RABBITMQ_QUEUE: this.config.get<string>('RABBITMQ_QUEUE'),
-    };
+    const env = rabbitmqEnv(this.config);
     const dlq = deadLetterQueue(notificationsQueue(env));
 
     const connection = await amqp.connect(rabbitmqUrl(env));

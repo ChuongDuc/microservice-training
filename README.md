@@ -90,6 +90,8 @@ npm run start:dev notification-service  # RabbitMQ, queue RABBITMQ_QUEUE (mặc 
 
 `notification-service` không mở cổng: nó nhận event bất đồng bộ (`@EventPattern`) từ queue `RABBITMQ_QUEUE` (kết nối theo `RABBITMQ_USER/PASSWORD/HOST/PORT`). Event hiện có: `user.registered`, `task.created` (tên + payload ở `NOTIFICATION_EVENTS` và `libs/common/src/dto/events`). Queue `durable` + message `persistent`, ack thủ công: message chỉ bị xoá khỏi queue khi xử lý xong, service tắt thì event nằm chờ trong queue. Payload sai, handler lỗi hoặc event không có handler -> message chuyển vào dead-letter queue `<queue>.dlq` (không giao lại ngay, tránh lặp vô hạn) và ghi log một lần; xem/đưa lại message trong DLQ qua giao diện quản trị RabbitMQ (shovel hoặc Move messages). Giao "ít nhất một lần": mỗi event có `eventId` (UUID) để phía nhận chống xử lý trùng.
 
+Phía phát: Auth Service phát `user.registered` khi đăng ký xong (đã lưu credential), Task Service phát `task.created` sau khi tạo task — qua `NotificationPublisher` (import `NotificationsPublisherModule` từ `@app/common`, tự gắn `eventId`). Phát kiểu "bắn rồi quên": request không chờ RabbitMQ, RabbitMQ tắt thì đăng ký/tạo task vẫn thành công, event đó chỉ được ghi log lỗi (chưa có outbox để phát lại).
+
 > Đã từng chạy `notification-service` trước khi có DLQ: queue `notifications_queue` cũ khai báo khác (thiếu dead-letter) nên RabbitMQ từ chối (`PRECONDITION_FAILED`). Xoá queue cũ một lần: `docker compose exec rabbitmq rabbitmqctl delete_queue notifications_queue`.
 
 Chống dò mật khẩu (`@nestjs/throttler`), vượt ngưỡng -> 429 kèm header `Retry-After` (giây):
@@ -149,6 +151,9 @@ npm run test:e2e:task
 # bật Task Service thật (TCP, cổng 4213) và gọi REST /tasks.
 # Cần Postgres (đã migrate user_db + auth_db + task_db) và Redis đang chạy.
 npm run test:e2e:gateway
+
+# Các e2e Auth/Task/Gateway phát event vào queue RabbitMQ riêng của từng file test (xoá khi
+# xong), nên cũng cần RabbitMQ đang chạy.
 
 # E2E Notification Service: bật service thật, phát event qua RabbitMQ (queue riêng cho
 # mỗi lần chạy, xoá khi xong). Cần RabbitMQ đang chạy.

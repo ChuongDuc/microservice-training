@@ -43,7 +43,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 
 ## Giai đoạn 4 — Nâng cao (nếu còn thời gian)
 - [x] Notification Service + kết nối RabbitMQ (lắng nghe event)
-- [ ] Task/User phát event async (`task.created`, `user.registered`)
+- [x] Task/User phát event async (`task.created`, `user.registered`)
 - [ ] Xem danh sách thông báo theo user
 
 ## Giai đoạn 5 — Hoàn thiện & đóng gói
