@@ -1,3 +1,4 @@
+import { NOTIFICATION_EVENTS, NotificationPublisher } from '@app/common';
 import { RpcException } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '../generated/prisma';
@@ -36,6 +37,7 @@ describe('TaskServiceService', () => {
       Promise.all(queries),
     ),
   };
+  const notifications = { publish: jest.fn() };
   const user = { userId: 'user-uuid', role: 'USER' as const };
   const task = { id: 'task-uuid', ownerId: user.userId, title: 'Viết test' };
 
@@ -45,6 +47,7 @@ describe('TaskServiceService', () => {
       providers: [
         TaskServiceService,
         { provide: PrismaService, useValue: prisma },
+        { provide: NotificationPublisher, useValue: notifications },
       ],
     }).compile();
     service = module.get(TaskServiceService);
@@ -60,6 +63,26 @@ describe('TaskServiceService', () => {
       expect(prisma.task.create).toHaveBeenCalledWith({
         data: { title: 'Viết test', priority: 'HIGH', ownerId: user.userId },
       });
+    });
+
+    it('tạo xong -> phát task.created', async () => {
+      prisma.task.create.mockResolvedValue(task);
+
+      await service.create(user, { title: 'Viết test' });
+
+      expect(notifications.publish).toHaveBeenCalledWith(
+        NOTIFICATION_EVENTS.TASK_CREATED,
+        { taskId: task.id, ownerId: task.ownerId, title: task.title },
+      );
+    });
+
+    it('ghi DB lỗi -> không phát event', async () => {
+      prisma.task.create.mockRejectedValue(new Error('db down'));
+
+      await expect(service.create(user, { title: 'x' })).rejects.toThrow(
+        'db down',
+      );
+      expect(notifications.publish).not.toHaveBeenCalled();
     });
   });
 

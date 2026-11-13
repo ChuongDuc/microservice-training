@@ -13,3 +13,4 @@ export * from './dto/events';
 export * from './errors';
 export * from './pipes';
 export * from './prisma';
+export * from './notifications';

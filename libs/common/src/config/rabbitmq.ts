@@ -5,6 +5,27 @@ export const DEFAULT_NOTIFICATIONS_QUEUE = 'notifications_queue';
 
 type Env = Record<string, string | undefined>;
 
+/** Các biến môi trường RabbitMQ mà các hàm dưới đây đọc. */
+const RABBITMQ_ENV_KEYS = [
+  'RABBITMQ_USER',
+  'RABBITMQ_PASSWORD',
+  'RABBITMQ_HOST',
+  'RABBITMQ_PORT',
+  'RABBITMQ_QUEUE',
+] as const;
+
+/**
+ * Lấy các biến RABBITMQ_* qua ConfigService (đã nạp `.env`) thành object Env cho các
+ * hàm bên dưới.
+ */
+export function rabbitmqEnv(config: {
+  get<T = string>(key: string): T | undefined;
+}): Env {
+  return Object.fromEntries(
+    RABBITMQ_ENV_KEYS.map((key) => [key, config.get<string>(key)]),
+  );
+}
+
 /**
  * URL kết nối RabbitMQ từ RABBITMQ_USER / RABBITMQ_PASSWORD / RABBITMQ_HOST /
  * RABBITMQ_PORT. User/password được encode: mật khẩu có ký tự như `@`, `/`, `:` làm

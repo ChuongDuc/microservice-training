@@ -3,6 +3,8 @@ import {
   CreateTaskDto,
   isPrismaErrorCode,
   ListTasksDto,
+  NOTIFICATION_EVENTS,
+  NotificationPublisher,
   PaginatedResult,
   rpcError,
   UpdateTaskDataDto,
@@ -41,10 +43,22 @@ export function ownedBy(user: AuthUserDto) {
  */
 @Injectable()
 export class TaskServiceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationPublisher,
+  ) {}
 
-  create(user: AuthUserDto, dto: CreateTaskDto): Promise<Task> {
-    return this.prisma.task.create({ data: { ...dto, ownerId: user.userId } });
+  /** Tạo task rồi phát `task.created` (không chờ, lỗi phát event không làm hỏng request). */
+  async create(user: AuthUserDto, dto: CreateTaskDto): Promise<Task> {
+    const task = await this.prisma.task.create({
+      data: { ...dto, ownerId: user.userId },
+    });
+    this.notifications.publish(NOTIFICATION_EVENTS.TASK_CREATED, {
+      taskId: task.id,
+      ownerId: task.ownerId,
+      title: task.title,
+    });
+    return task;
   }
 
   async findAll(

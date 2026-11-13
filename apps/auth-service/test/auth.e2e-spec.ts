@@ -1,4 +1,8 @@
-import { AUTH_PATTERNS, createRpcValidationPipe } from '@app/common';
+import {
+  AUTH_PATTERNS,
+  createRpcValidationPipe,
+  NOTIFICATION_EVENTS,
+} from '@app/common';
 import { INestMicroservice } from '@nestjs/common';
 import {
   ClientProxy,
@@ -12,6 +16,7 @@ import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService as UserPrismaService } from '../../user-service/src/prisma/prisma.service';
 import { UserServiceModule } from '../../user-service/src/user-service.module';
+import { NotificationsTestQueue } from '../../../test/e2e/notifications-test-queue';
 import { AuthServiceModule } from '../src/auth-service.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
@@ -28,6 +33,8 @@ const EMAIL_PREFIX = 'e2e-auth-';
 // Auth Service đọc cổng User Service từ env (ConfigModule không ghi đè biến đã có)
 process.env.USER_SERVICE_HOST = '127.0.0.1';
 process.env.USER_SERVICE_PORT = String(USER_PORT);
+// user.registered phát vào queue riêng của lần chạy này (cần RabbitMQ đang chạy)
+const events = new NotificationsTestQueue();
 
 describe('Auth Service (e2e qua TCP)', () => {
   let userApp: INestMicroservice;
@@ -95,6 +102,7 @@ describe('Auth Service (e2e qua TCP)', () => {
     await client?.close();
     await authApp?.close();
     await userApp?.close();
+    await events.delete();
   });
 
   describe(AUTH_PATTERNS.REGISTER, () => {
@@ -126,6 +134,18 @@ describe('Auth Service (e2e qua TCP)', () => {
       await expect(
         argon2.verify(credential!.passwordHash, payload.password),
       ).resolves.toBe(true);
+
+      // Đăng ký xong -> user.registered vào RabbitMQ, không kèm password
+      const event = await events.waitFor<{ userId: string }>(
+        NOTIFICATION_EVENTS.USER_REGISTERED,
+        (data) => data.userId === user.id,
+      );
+      expect(event.data).toEqual({
+        eventId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        userId: user.id,
+        email: payload.email,
+        displayName: 'An',
+      });
     });
 
     it('đăng ký lại cùng email -> 409', async () => {

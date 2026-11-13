@@ -1,4 +1,8 @@
-import { createRpcValidationPipe, TASK_PATTERNS } from '@app/common';
+import {
+  createRpcValidationPipe,
+  NOTIFICATION_EVENTS,
+  TASK_PATTERNS,
+} from '@app/common';
 import { INestMicroservice } from '@nestjs/common';
 import {
   ClientProxy,
@@ -9,6 +13,7 @@ import { Test } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { NotificationsTestQueue } from '../../../test/e2e/notifications-test-queue';
 import { TaskServiceModule } from '../src/task-service.module';
 
 /**
@@ -17,6 +22,8 @@ import { TaskServiceModule } from '../src/task-service.module';
  */
 const PORT = 4103; // cổng riêng cho test, tránh đụng service đang chạy ở 4003
 const MISSING_ID = '00000000-0000-4000-8000-000000000000';
+// task.created phát vào queue riêng của lần chạy này (cần RabbitMQ đang chạy)
+const events = new NotificationsTestQueue();
 
 describe('Task Service (e2e qua TCP)', () => {
   let app: INestMicroservice;
@@ -69,6 +76,7 @@ describe('Task Service (e2e qua TCP)', () => {
     await prisma?.task.deleteMany({ where: { ownerId: { in: owners } } });
     await client?.close();
     await app?.close();
+    await events.delete();
   });
 
   describe(TASK_PATTERNS.CREATE, () => {
@@ -90,6 +98,21 @@ describe('Task Service (e2e qua TCP)', () => {
       await expect(
         prisma.task.findUnique({ where: { id: task.id } }),
       ).resolves.toMatchObject({ ownerId: user.userId });
+    });
+
+    it('tạo task -> phát task.created vào RabbitMQ (kèm eventId)', async () => {
+      const task = await createTask({ title: 'Có thông báo' });
+
+      const event = await events.waitFor<{ taskId: string }>(
+        NOTIFICATION_EVENTS.TASK_CREATED,
+        (data) => data.taskId === task.id,
+      );
+      expect(event.data).toEqual({
+        eventId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        taskId: task.id,
+        ownerId: user.userId,
+        title: 'Có thông báo',
+      });
     });
 
     it('data sai -> 400 kèm đường dẫn field', async () => {
