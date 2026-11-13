@@ -1,0 +1,38 @@
+// Prisma schema cho NOTIFICATION SERVICE
+// Mỗi service có schema + client riêng (nguyên tắc "mỗi service một DB").
+
+generator client {
+  provider = "prisma-client-js"
+  // Xuất client vào thư mục riêng của service để không đè lên client của service khác
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NOTIFICATION_DATABASE_URL")
+}
+
+// Loại thông báo: mỗi loại ứng với một event trong NOTIFICATION_EVENTS.
+enum NotificationType {
+  USER_REGISTERED
+  TASK_CREATED
+}
+
+// Thông báo gửi tới một user, tạo từ event nhận qua RabbitMQ.
+// `userId` là id của User bên USER SERVICE — không có foreign key xuyên DB.
+model Notification {
+  id        String           @id @default(uuid())
+  // eventId của event gốc, UNIQUE: RabbitMQ giao "ít nhất một lần", event giao lại
+  // không tạo thêm thông báo trùng (insert lần hai vi phạm unique -> bỏ qua)
+  eventId   String           @unique @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  title     String           @db.VarChar(200)
+  message   String
+  // Dữ liệu kèm theo để client dẫn tới đối tượng liên quan (vd: { taskId })
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  // Truy vấn chính: thông báo của một user, mới nhất trước, có phân trang
+  @@index([userId, createdAt])
+}

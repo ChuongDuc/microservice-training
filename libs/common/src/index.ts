@@ -10,6 +10,7 @@ export * from './dto/task';
 export * from './dto/auth';
 export * from './dto/identity';
 export * from './dto/events';
+export * from './dto/notification';
 export * from './errors';
 export * from './pipes';
 export * from './prisma';
