@@ -2,7 +2,7 @@
 # (postgres/postgres, guest/guest, Redis không mật khẩu), không mở cho cả mạng LAN.
 services:
   # ----------------------------------------------------------------------
-  # PostgreSQL: một instance, tạo sẵn 3 database riêng cho 3 service
+  # PostgreSQL: một instance, tạo sẵn 4 database riêng cho 4 service
   # (tôn trọng nguyên tắc "mỗi service một database" ở mức logic).
   # ----------------------------------------------------------------------
   postgres:
@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       # Danh sách database sẽ được script init tạo tự động
-      POSTGRES_MULTIPLE_DATABASES: auth_db,user_db,task_db
+      POSTGRES_MULTIPLE_DATABASES: auth_db,user_db,task_db,notification_db
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
