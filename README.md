@@ -108,6 +108,12 @@ Chống dò mật khẩu (`@nestjs/throttler`), vượt ngưỡng -> 429 kèm he
 
 Phân quyền theo role: gắn `@Roles('ADMIN')` ở controller hoặc route (gắn ở cả hai thì route thắng), `RolesGuard` toàn cục chạy sau `JwtAuthGuard` và trả 403 khi role trong access token không nằm trong danh sách. Route có `@Roles()` luôn cần token, kể cả khi gắn thêm `@Public()`. Role đọc từ token (không hỏi User Service), nên đổi role chỉ có hiệu lực khi người đó lấy access token mới — tối đa `JWT_ACCESS_EXPIRES_IN` (15 phút).
 
+**Tài liệu API (Swagger).** Gateway chạy thì mở http://localhost:3000/api xem toàn bộ REST API và gọi thử ngay trên trang (JSON OpenAPI: `/api-json`). Route có ổ khoá cần token: gọi `POST /auth/login` -> copy `accessToken` -> bấm **Authorize** và dán vào. Tắt bằng `SWAGGER_ENABLED=false`.
+
+- Schema body/query sinh từ DTO trong `@app/common` nhờ CLI plugin `@nestjs/swagger` (khai báo ở `nest-cli.json`, project `gateway`): đọc kiểu TypeScript, rule class-validator (độ dài, enum, min/max...) và comment JSDoc — không phải gắn `@ApiProperty` vào từng field. DTO dẫn xuất dùng `PartialType` / `OmitType` của `@nestjs/swagger` (cùng hành vi với `@nestjs/mapped-types` nhưng giữ metadata tài liệu).
+- Controller mới: gắn `@ApiTags`, `@ApiOperation({ summary })` cho từng route và `@ApiBearerAuth(BEARER_AUTH)` nếu cần token (route `@Public()` thì không).
+- E2E `apps/gateway/test/swagger.e2e-spec.ts` kiểm tra `/api` và nội dung tài liệu (đủ route, khoá đúng route, schema DTO); ts-jest chạy cùng plugin qua `swagger-plugin-transformer.js`.
+
 Route `/tasks` ở Gateway (cần access token, chỉ thao tác trên task của người gọi — task của người khác trả 404):
 
 | Method   | Route                         | Mô tả                                                                                                |

@@ -16,7 +16,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { BEARER_AUTH } from '../http/swagger';
 import { sendRpc } from '../rpc/send-rpc';
 import { CurrentUser } from './current-user.decorator';
 import { AuthThrottlerGuard } from './login-throttle';
@@ -27,11 +29,13 @@ import { Public } from './public.decorator';
  * (ValidationPipe toàn cục, lỗi 400 kèm chi tiết field); Auth Service validate lại.
  * register/login/refresh/logout công khai (@Public); `/auth/me` cần access token.
  */
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(@Inject(AUTH_SERVICE) private readonly authClient: ClientProxy) {}
 
   /** Chỉ giới hạn theo IP: chặn dò email đã đăng ký và tạo tài khoản rác hàng loạt. */
+  @ApiOperation({ summary: 'Đăng ký tài khoản' })
   @Public()
   @UseGuards(AuthThrottlerGuard)
   @SkipThrottle({ default: true })
@@ -41,6 +45,7 @@ export class AuthController {
   }
 
   /** Giới hạn theo IP + email và theo IP (chống dò mật khẩu), vượt ngưỡng -> 429. */
+  @ApiOperation({ summary: 'Đăng nhập, nhận access token + refresh token' })
   @Public()
   @UseGuards(AuthThrottlerGuard)
   @Post('login')
@@ -49,6 +54,7 @@ export class AuthController {
     return this.send(AUTH_PATTERNS.LOGIN, dto);
   }
 
+  @ApiOperation({ summary: 'Đổi refresh token lấy cặp token mới' })
   @Public()
   @Post('refresh')
   @HttpCode(200)
@@ -56,6 +62,7 @@ export class AuthController {
     return this.send(AUTH_PATTERNS.REFRESH, dto);
   }
 
+  @ApiOperation({ summary: 'Đăng xuất (thu hồi refresh token)' })
   @Public()
   @Post('logout')
   @HttpCode(200)
@@ -64,6 +71,8 @@ export class AuthController {
   }
 
   /** Danh tính lấy từ access token (đã verify ở JwtAuthGuard), không gọi service nào. */
+  @ApiOperation({ summary: 'Danh tính trong access token (userId + role)' })
+  @ApiBearerAuth(BEARER_AUTH)
   @Get('me')
   me(@CurrentUser() user: AuthUserDto) {
     return user;
