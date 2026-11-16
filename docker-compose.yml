@@ -1,5 +1,55 @@
 # Mọi cổng chỉ publish trên 127.0.0.1: hạ tầng dev dùng mật khẩu mặc định
 # (postgres/postgres, guest/guest, Redis không mật khẩu), không mở cho cả mạng LAN.
+#
+# - `docker compose up -d`: chỉ hạ tầng (Postgres, Redis, RabbitMQ) — chạy app bằng
+#   `npm run start:dev <app>` trên máy.
+# - `docker compose --profile app up -d --build`: hạ tầng + chạy migration + cả 5 app trong
+#   container. Chỉ Gateway publish cổng (127.0.0.1:3000); các service trong chỉ nói chuyện
+#   với nhau trong mạng nội bộ của compose. Biến lấy từ `.env` (JWT_* bắt buộc).
+
+# ---- Biến môi trường dùng chung cho các app (YAML anchor, gộp bằng `<<:`) ----
+x-rabbitmq-env: &rabbitmq-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: '5672'
+  RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+  RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-notifications_queue}
+
+# Để trống nếu .env không có. Không dùng `:?` vì compose kiểm tra cả file, kể cả khi chỉ
+# bật hạ tầng; thay vào đó service `migrate` kiểm tra secret trước (cùng quy tắc với
+# Gateway/Auth) và dừng `up` kèm lý do nếu thiếu/không an toàn.
+x-jwt-env: &jwt-env
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+  JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+  JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+
+# URL Prisma của từng database. Mỗi URL một anchor, dùng chung cho `migrate` và service
+# của DB đó. Compose ghép thẳng POSTGRES_USER/POSTGRES_PASSWORD vào URL, KHÔNG encode:
+# mật khẩu có `@ / : ? #` làm hỏng URL — dùng mật khẩu chỉ gồm chữ, số, `-`, `_`.
+x-database-urls: &database-urls
+  USER_DATABASE_URL: &user-db-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/user_db?schema=public
+  AUTH_DATABASE_URL: &auth-db-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/auth_db?schema=public
+  TASK_DATABASE_URL: &task-db-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/task_db?schema=public
+  NOTIFICATION_DATABASE_URL: &notification-db-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/notification_db?schema=public
+
+# Địa chỉ các service trong mạng compose (tên service = hostname)
+x-service-hosts: &service-hosts
+  AUTH_SERVICE_HOST: auth-service
+  AUTH_SERVICE_PORT: '4001'
+  USER_SERVICE_HOST: user-service
+  USER_SERVICE_PORT: '4002'
+  TASK_SERVICE_HOST: task-service
+  TASK_SERVICE_PORT: '4003'
+  NOTIFICATION_SERVICE_HOST: notification-service
+  NOTIFICATION_SERVICE_PORT: '4004'
+
+# Cấu hình chung của một app: chỉ chạy với profile `app`, tự khởi động lại nếu chết.
+# Phần `build` (Dockerfile + build arg APP) và `image` khai báo ở từng service.
+x-app: &app
+  profiles: [app]
+  restart: unless-stopped
+
 services:
   # ----------------------------------------------------------------------
   # PostgreSQL: một instance, tạo sẵn 4 database riêng cho 4 service
@@ -63,6 +113,131 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ----------------------------------------------------------------------
+  # Bước chuẩn bị, chạy xong thì thoát; mọi app chỉ khởi động sau khi bước này thành công:
+  #   1. Kiểm tra JWT secret (thiếu/ngắn/giá trị mẫu/trùng nhau -> dừng `up` kèm lý do).
+  #   2. Áp dụng migration Prisma của 4 database.
+  # Dùng stage `build` của Dockerfile (có prisma CLI, ts-node, schema + migration).
+  # ----------------------------------------------------------------------
+  migrate:
+    profiles: [app]
+    build:
+      context: .
+      target: build
+    image: tm-migrate
+    environment:
+      <<: [*database-urls, *jwt-env]
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npx ts-node -T scripts/check-jwt-secrets.ts
+        for service in user auth task notification; do
+          npx prisma migrate deploy --schema="apps/$${service}-service/prisma/schema.prisma"
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------
+  # Các app (profile `app`). *_BIND_HOST=0.0.0.0: nghe trong mạng compose, nhưng KHÔNG
+  # publish cổng ra máy host — chỉ Gateway được gọi tới các service trong.
+  # ----------------------------------------------------------------------
+  user-service:
+    <<: *app
+    build:
+      context: .
+      args: { APP: user-service }
+    image: tm-user-service
+    environment:
+      USER_DATABASE_URL: *user-db-url
+      USER_SERVICE_BIND_HOST: 0.0.0.0
+      USER_SERVICE_PORT: '4002'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  auth-service:
+    <<: *app
+    build:
+      context: .
+      args: { APP: auth-service }
+    image: tm-auth-service
+    environment:
+      <<: [*jwt-env, *rabbitmq-env]
+      AUTH_DATABASE_URL: *auth-db-url
+      AUTH_SERVICE_BIND_HOST: 0.0.0.0
+      AUTH_SERVICE_PORT: '4001'
+      USER_SERVICE_HOST: user-service
+      USER_SERVICE_PORT: '4002'
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+
+  task-service:
+    <<: *app
+    build:
+      context: .
+      args: { APP: task-service }
+    image: tm-task-service
+    environment:
+      <<: *rabbitmq-env
+      TASK_DATABASE_URL: *task-db-url
+      TASK_SERVICE_BIND_HOST: 0.0.0.0
+      TASK_SERVICE_PORT: '4003'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    <<: *app
+    build:
+      context: .
+      args: { APP: notification-service }
+    image: tm-notification-service
+    environment:
+      <<: *rabbitmq-env
+      NOTIFICATION_DATABASE_URL: *notification-db-url
+      NOTIFICATION_SERVICE_BIND_HOST: 0.0.0.0
+      NOTIFICATION_SERVICE_PORT: '4004'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  gateway:
+    <<: *app
+    build:
+      context: .
+      args: { APP: gateway }
+    image: tm-gateway
+    environment:
+      <<: [*jwt-env, *service-hosts]
+      GATEWAY_PORT: '3000'
+      LOGIN_THROTTLE_LIMIT: ${LOGIN_THROTTLE_LIMIT:-5}
+      LOGIN_THROTTLE_IP_LIMIT: ${LOGIN_THROTTLE_IP_LIMIT:-20}
+      LOGIN_THROTTLE_TTL_MS: ${LOGIN_THROTTLE_TTL_MS:-60000}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+    ports:
+      - '127.0.0.1:${GATEWAY_PORT:-3000}:3000'
+    depends_on:
+      - auth-service
+      - user-service
+      - task-service
+      - notification-service
 
 volumes:
   postgres_data:

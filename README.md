@@ -138,6 +138,24 @@ Admin không tự đổi role hay tự khoá chính mình được (400). User b
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 5 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng — riêng `notification-service` chờ cả cổng TCP lẫn queue của nó có consumer, nên cần RabbitMQ (và Postgres) đang chạy (CI cũng chạy bước này).
 
+## Chạy toàn hệ thống bằng Docker
+
+Một lệnh bật hạ tầng, chạy migration và cả 5 app trong container (không cần Node.js trên máy, chỉ cần `.env` có `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` như bước 2):
+
+```bash
+docker compose --profile app up -d --build
+docker compose --profile app ps     # migrate ở trạng thái Exited (0), các app Up
+```
+
+API ở http://localhost:3000 (Gateway — app duy nhất publish cổng). Xem log: `docker compose logs -f gateway`. Tắt: `docker compose --profile app down`.
+
+Kiểm tra nhanh cả hệ thống: `npm run smoke:docker` gọi API thật qua Gateway (đăng ký một user `smoke-<uuid>@test.com` -> đăng nhập -> `GET /users/me` -> chờ thông báo chào mừng ở `GET /notifications`). CI chạy cùng kịch bản này trong job `Docker`.
+
+- Các app nằm trong profile `app`: `docker compose up -d` (không có `--profile app`) vẫn chỉ bật hạ tầng để chạy app bằng `npm run start:dev` như phần trên. Đang chạy app trong container thì cổng 3000 đã bị Gateway container chiếm.
+- `Dockerfile` dùng chung cho cả 5 app, chọn app bằng build arg: `docker build --build-arg APP=task-service -t tm-task-service .`. Stage `build` generate Prisma client trong container (query engine cho Linux) và build cả 5 app một lần, các image dùng lại cache của nhau; image chạy (`runtime`) chỉ có dependencies chạy thật + bản build của một app, chạy bằng user `node`.
+- Service `migrate` chạy `prisma migrate deploy` cho 4 database rồi thoát; các service có DB chỉ khởi động sau khi migrate thành công.
+- Trong container, app đọc cấu hình từ biến môi trường do `docker-compose.yml` truyền vào (hostname là tên service: `postgres`, `redis`, `rabbitmq`, `user-service`...), không đọc file `.env` (file này chỉ dùng để compose điền giá trị như `JWT_*`, mật khẩu Postgres/RabbitMQ).
+
 ## Test
 
 ```bash
@@ -180,5 +198,6 @@ apps/
 libs/
   common/          # @app/common: constants, message patterns, pipe dùng chung
 docker/            # Script khởi tạo Postgres
-docker-compose.yml # Postgres + Redis + RabbitMQ
+Dockerfile         # Image cho từng app (build arg APP)
+docker-compose.yml # Postgres + Redis + RabbitMQ; profile `app`: migration + 5 app
 ```

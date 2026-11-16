@@ -1,0 +1,19 @@
+# Không đưa vào build context: build lại trong container, hoặc chứa bí mật
+node_modules
+dist
+apps/*/generated
+.env
+.env.*
+!.env.example
+.git
+.github
+.vscode
+.idea
+coverage
+*.log
+
+# Không dùng khi build/chạy: loại ra để sửa test hay tài liệu không làm mất cache build
+test
+apps/*/test
+**/*.spec.ts
+**/*.md
