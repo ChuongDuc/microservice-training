@@ -47,8 +47,8 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Lưu + xem danh sách thông báo theo user (`GET /notifications`)
 
 ## Giai đoạn 5 — Hoàn thiện & đóng gói
-- [ ] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)
-- [ ] Chạy toàn hệ thống bằng `docker compose up`
+- [x] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)
+- [x] Chạy toàn hệ thống bằng `docker compose --profile app up -d --build`
 - [ ] Swagger ở Gateway
 - [ ] Health check mỗi service
 - [ ] README + sơ đồ kiến trúc + kịch bản demo
