@@ -50,6 +50,15 @@ x-app: &app
   profiles: [app]
   restart: unless-stopped
 
+# Nhịp healthcheck chung của các app. Service TCP: `scripts/tcp-healthcheck.js` gửi
+# `health.check` -> healthy khi service VÀ phụ thuộc của nó (DB, Redis, RabbitMQ) đều sống;
+# xem trạng thái bằng `docker compose --profile app ps`.
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  timeout: 8s
+  retries: 3
+  start_period: 30s
+
 services:
   # ----------------------------------------------------------------------
   # PostgreSQL: một instance, tạo sẵn 4 database riêng cho 4 service
@@ -151,6 +160,9 @@ services:
       context: .
       args: { APP: user-service }
     image: tm-user-service
+    healthcheck:
+      <<: *app-healthcheck
+      test: ['CMD', 'node', 'scripts/tcp-healthcheck.js', '4002']
     environment:
       USER_DATABASE_URL: *user-db-url
       USER_SERVICE_BIND_HOST: 0.0.0.0
@@ -165,6 +177,9 @@ services:
       context: .
       args: { APP: auth-service }
     image: tm-auth-service
+    healthcheck:
+      <<: *app-healthcheck
+      test: ['CMD', 'node', 'scripts/tcp-healthcheck.js', '4001']
     environment:
       <<: [*jwt-env, *rabbitmq-env]
       AUTH_DATABASE_URL: *auth-db-url
@@ -182,7 +197,7 @@ services:
       rabbitmq:
         condition: service_healthy
       user-service:
-        condition: service_started
+        condition: service_healthy
 
   task-service:
     <<: *app
@@ -190,6 +205,9 @@ services:
       context: .
       args: { APP: task-service }
     image: tm-task-service
+    healthcheck:
+      <<: *app-healthcheck
+      test: ['CMD', 'node', 'scripts/tcp-healthcheck.js', '4003']
     environment:
       <<: *rabbitmq-env
       TASK_DATABASE_URL: *task-db-url
@@ -207,6 +225,9 @@ services:
       context: .
       args: { APP: notification-service }
     image: tm-notification-service
+    healthcheck:
+      <<: *app-healthcheck
+      test: ['CMD', 'node', 'scripts/tcp-healthcheck.js', '4004']
     environment:
       <<: *rabbitmq-env
       NOTIFICATION_DATABASE_URL: *notification-db-url
@@ -224,6 +245,11 @@ services:
       context: .
       args: { APP: gateway }
     image: tm-gateway
+    # Chỉ kiểm tra Gateway còn sống (/health/live): service phía trong chết thì Gateway vẫn
+    # trả 503 cho route liên quan, không coi cả Gateway là chết. Toàn hệ thống: GET /health
+    healthcheck:
+      <<: *app-healthcheck
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/health/live']
     environment:
       <<: [*jwt-env, *service-hosts]
       GATEWAY_PORT: '3000'
@@ -233,11 +259,16 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-}
     ports:
       - '127.0.0.1:${GATEWAY_PORT:-3000}:3000'
+    # Chờ các service healthy: Gateway nhận request khi cả hệ thống đã sẵn sàng
     depends_on:
-      - auth-service
-      - user-service
-      - task-service
-      - notification-service
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
 
 volumes:
   postgres_data:

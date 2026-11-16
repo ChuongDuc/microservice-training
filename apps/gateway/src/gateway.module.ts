@@ -18,6 +18,8 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { loginThrottleOptions } from './auth/login-throttle';
 import { NotificationsController } from './notifications/notifications.controller';
 import { RolesGuard } from './auth/roles.guard';
+import { HealthController } from './health/health.controller';
+import { HealthService } from './health/health.service';
 import { AllHttpExceptionsFilter } from './http/http-exception.filter';
 import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
@@ -70,8 +72,10 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     TasksController,
     AdminUsersController,
     NotificationsController,
+    HealthController,
   ],
   providers: [
+    HealthService,
     // Mọi route cần access token, trừ route có @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Sau JwtAuthGuard (guard toàn cục chạy theo thứ tự đăng ký): cần request.user

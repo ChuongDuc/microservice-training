@@ -15,3 +15,4 @@ export * from './errors';
 export * from './pipes';
 export * from './prisma';
 export * from './notifications';
+export * from './health';

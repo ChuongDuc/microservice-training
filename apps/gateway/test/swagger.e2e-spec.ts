@@ -73,6 +73,8 @@ describe('Gateway Swagger (e2e)', () => {
         'PATCH /admin/users/{id}/role',
         'PATCH /admin/users/{id}/status',
         'GET /notifications',
+        'GET /health',
+        'GET /health/live',
       ].sort(),
     );
     for (const ops of Object.values(doc.paths)) {
@@ -96,6 +98,7 @@ describe('Gateway Swagger (e2e)', () => {
     ]) {
       expect(security(path, 'post')).toBeUndefined();
     }
+    expect(security('/health', 'get')).toBeUndefined();
     expect(security('/auth/me', 'get')).toEqual(bearer);
     expect(security('/tasks', 'post')).toEqual(bearer);
     expect(security('/admin/users', 'get')).toEqual(bearer);

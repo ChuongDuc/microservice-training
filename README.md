@@ -114,6 +114,26 @@ Phân quyền theo role: gắn `@Roles('ADMIN')` ở controller hoặc route (g�
 - Controller mới: gắn `@ApiTags`, `@ApiOperation({ summary })` cho từng route và `@ApiBearerAuth(BEARER_AUTH)` nếu cần token (route `@Public()` thì không).
 - E2E `apps/gateway/test/swagger.e2e-spec.ts` kiểm tra `/api` và nội dung tài liệu (đủ route, khoá đúng route, schema DTO); ts-jest chạy cùng plugin qua `swagger-plugin-transformer.js`.
 
+**Health check.** Biết service nào sống/chết qua Gateway (công khai, không cần token):
+
+- `GET /health/live`: Gateway còn sống — luôn `200 { "status": "up" }`, không gọi service nào.
+- `GET /health`: Gateway gửi `health.check` (`HEALTH_PATTERNS.CHECK`) qua TCP tới cả 4 service song song (chờ tối đa 5s mỗi service); mỗi service tự kiểm tra phụ thuộc của nó (tối đa 3s mỗi phụ thuộc): DB (`SELECT 1`) cho cả 4, Redis cho Auth, RabbitMQ cho Notification (queue thông báo phải có consumer). `200` khi mọi thành phần `up`, `503` khi có thành phần `down`:
+
+```json
+{
+  "status": "down",
+  "services": {
+    "gateway": { "status": "up" },
+    "auth-service": { "status": "up", "dependencies": { "database": "up", "redis": "up" } },
+    "user-service": { "status": "down" },
+    "task-service": { "status": "up", "dependencies": { "database": "up" } },
+    "notification-service": { "status": "up", "dependencies": { "database": "up", "rabbitmq": "down" } }
+  }
+}
+```
+
+Service không trả lời (chết, sai cổng, quá hạn) chỉ có `status: down`. Kết quả chỉ có `up`/`down`; lý do lỗi (host, cổng, thông báo của driver) ghi vào log của service/Gateway, không trả ra ngoài. Service mới: thêm controller `@MessagePattern(HEALTH_PATTERNS.CHECK)` gọi `checkDependencies({ ... })` của `@app/common` và đăng ký client của nó trong `HealthService` của Gateway.
+
 Route `/tasks` ở Gateway (cần access token, chỉ thao tác trên task của người gọi — task của người khác trả 404):
 
 | Method   | Route                         | Mô tả                                                                                                |
@@ -150,15 +170,16 @@ Một lệnh bật hạ tầng, chạy migration và cả 5 app trong container 
 
 ```bash
 docker compose --profile app up -d --build
-docker compose --profile app ps     # migrate ở trạng thái Exited (0), các app Up
+docker compose --profile app ps     # migrate ở trạng thái Exited (0), các app Up (healthy)
 ```
 
 API ở http://localhost:3000 (Gateway — app duy nhất publish cổng). Xem log: `docker compose logs -f gateway`. Tắt: `docker compose --profile app down`.
 
-Kiểm tra nhanh cả hệ thống: `npm run smoke:docker` gọi API thật qua Gateway (đăng ký một user `smoke-<uuid>@test.com` -> đăng nhập -> `GET /users/me` -> chờ thông báo chào mừng ở `GET /notifications`). CI chạy cùng kịch bản này trong job `Docker`.
+Kiểm tra nhanh cả hệ thống: `npm run smoke:docker` gọi API thật qua Gateway (chờ `GET /health` trả 200 -> đăng ký một user `smoke-<uuid>@test.com` -> đăng nhập -> `GET /users/me` -> chờ thông báo chào mừng ở `GET /notifications`). CI chạy cùng kịch bản này trong job `Docker`.
 
 - Các app nằm trong profile `app`: `docker compose up -d` (không có `--profile app`) vẫn chỉ bật hạ tầng để chạy app bằng `npm run start:dev` như phần trên. Đang chạy app trong container thì cổng 3000 đã bị Gateway container chiếm.
 - `Dockerfile` dùng chung cho cả 5 app, chọn app bằng build arg: `docker build --build-arg APP=task-service -t tm-task-service .`. Stage `build` generate Prisma client trong container (query engine cho Linux) và build cả 5 app một lần, các image dùng lại cache của nhau; image chạy (`runtime`) chỉ có dependencies chạy thật + bản build của một app, chạy bằng user `node`.
+- Mỗi app có Docker healthcheck (xem cột STATUS của `ps`): service TCP chạy `scripts/tcp-healthcheck.js <cổng>` (gửi `health.check`, healthy khi service và phụ thuộc đều `up`), Gateway gọi `GET /health/live`. Gateway (và Auth, vì gọi User Service) chỉ khởi động khi các service nó cần đã healthy. Trạng thái toàn hệ thống: `curl -i http://localhost:3000/health`.
 - Service `migrate` chạy `prisma migrate deploy` cho 4 database rồi thoát; các service có DB chỉ khởi động sau khi migrate thành công.
 - Trong container, app đọc cấu hình từ biến môi trường do `docker-compose.yml` truyền vào (hostname là tên service: `postgres`, `redis`, `rabbitmq`, `user-service`...), không đọc file `.env` (file này chỉ dùng để compose điền giá trị như `JWT_*`, mật khẩu Postgres/RabbitMQ).
 
@@ -180,6 +201,7 @@ npm run test:e2e:task
 # E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*;
 # bật Task Service thật (TCP, cổng 4213) và gọi REST /tasks.
 # Bật Notification Service thật (TCP 4224) và gọi REST /notifications (task.created -> thông báo).
+# GET /health: chỉ bật User Service (TCP 4292), các service khác phải được báo down.
 # Cần Postgres (đã migrate user_db + auth_db + task_db + notification_db), Redis và RabbitMQ.
 npm run test:e2e:gateway
 

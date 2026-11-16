@@ -60,6 +60,8 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY --from=bundle /out ./
+# Docker healthcheck của các service TCP (xem docker-compose.yml)
+COPY scripts/tcp-healthcheck.js ./scripts/
 ARG APP
 ENV APP_NAME=${APP}
 # Không chạy bằng root

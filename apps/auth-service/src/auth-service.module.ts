@@ -11,6 +11,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
+import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 
@@ -39,7 +40,7 @@ import { RedisModule } from './redis/redis.module';
       },
     ]),
   ],
-  controllers: [AuthServiceController],
+  controllers: [AuthServiceController, HealthController],
   providers: [
     AuthServiceService,
     // Mọi lỗi trả về phía gọi theo dạng thống nhất { statusCode, message, errors? }
