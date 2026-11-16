@@ -1,4 +1,4 @@
-import { OmitType } from '@nestjs/mapped-types';
+import { OmitType } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { USER_ROLES, UserRole, WithAuthUser } from '../identity';

@@ -16,8 +16,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
+import { BEARER_AUTH } from '../http/swagger';
 import { sendRpc } from '../rpc/send-rpc';
 
 /**
@@ -26,17 +28,21 @@ import { sendRpc } from '../rpc/send-rpc';
  * toàn cục); User Service kiểm tra lại role và validate lại `data`.
  */
 @Roles('ADMIN')
+@ApiTags('admin')
+@ApiBearerAuth(BEARER_AUTH)
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(@Inject(USER_SERVICE) private readonly userClient: ClientProxy) {}
 
   /** Danh sách user: `?page=&limit=&search=&role=&status=`. */
+  @ApiOperation({ summary: 'Danh sách user (ADMIN)' })
   @Get()
   list(@CurrentUser() user: AuthUserDto, @Query() query: AdminListUsersDto) {
     return this.send(USER_PATTERNS.ADMIN_LIST, user, query);
   }
 
   /** Đổi role: body `{ role: 'USER' | 'ADMIN' }`. */
+  @ApiOperation({ summary: 'Đổi role của user (ADMIN)' })
   @Patch(':id/role')
   updateRole(
     @CurrentUser() user: AuthUserDto,
@@ -48,6 +54,7 @@ export class AdminUsersController {
   }
 
   /** Khoá / mở khoá: body `{ status: 'ACTIVE' | 'BLOCKED' }`. */
+  @ApiOperation({ summary: 'Khoá / mở khoá user (ADMIN)' })
   @Patch(':id/status')
   updateStatus(
     @CurrentUser() user: AuthUserDto,

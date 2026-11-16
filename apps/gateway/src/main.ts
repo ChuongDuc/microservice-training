@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { GatewayModule } from './gateway.module';
+import { isSwaggerEnabled, setupSwagger, SWAGGER_PATH } from './http/swagger';
 import { applyTrustProxy } from './http/trust-proxy';
 
 async function bootstrap() {
@@ -20,7 +21,16 @@ async function bootstrap() {
   applyTrustProxy(app, process.env.TRUST_PROXY);
   // SIGTERM/SIGINT (vd: docker stop) -> chạy onModuleDestroy, đóng kết nối DB/Redis/TCP
   app.enableShutdownHooks();
+  // Tài liệu API (Swagger UI) ở /api, tắt bằng SWAGGER_ENABLED=false
+  const swagger = isSwaggerEnabled(process.env.SWAGGER_ENABLED);
+  if (swagger) setupSwagger(app);
   await app.listen(port);
   Logger.log(`Gateway (HTTP) đang lắng nghe tại cổng ${port}`, 'Bootstrap');
+  if (swagger) {
+    Logger.log(
+      `Swagger UI: http://localhost:${port}/${SWAGGER_PATH}`,
+      'Bootstrap',
+    );
+  }
 }
 bootstrap();

@@ -49,7 +49,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 ## Giai đoạn 5 — Hoàn thiện & đóng gói
 - [x] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)
 - [x] Chạy toàn hệ thống bằng `docker compose --profile app up -d --build`
-- [ ] Swagger ở Gateway
+- [x] Swagger ở Gateway (`/api`)
 - [ ] Health check mỗi service
 - [ ] README + sơ đồ kiến trúc + kịch bản demo
 

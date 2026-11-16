@@ -1,4 +1,4 @@
-import { OmitType, PartialType } from '@nestjs/mapped-types';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { CreateUserDto } from './create-user.dto';
 

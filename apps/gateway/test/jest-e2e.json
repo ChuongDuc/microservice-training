@@ -12,7 +12,16 @@
   ],
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.ts$": "ts-jest"
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        "astTransformers": {
+          "before": [
+            "<rootDir>/apps/gateway/test/swagger-plugin-transformer.js"
+          ]
+        }
+      }
+    ]
   },
   "moduleNameMapper": {
     "^@app/common(|/.*)$": "<rootDir>/libs/common/src/$1"
