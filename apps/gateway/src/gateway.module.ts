@@ -1,6 +1,7 @@
 import {
   AUTH_SERVICE,
   createHttpValidationPipe,
+  NOTIFICATION_SERVICE,
   SERVICE_TCP_PORTS,
   TASK_SERVICE,
   USER_SERVICE,
@@ -15,6 +16,7 @@ import { AdminUsersController } from './admin/admin-users.controller';
 import { AuthController } from './auth/auth.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { loginThrottleOptions } from './auth/login-throttle';
+import { NotificationsController } from './notifications/notifications.controller';
 import { RolesGuard } from './auth/roles.guard';
 import { AllHttpExceptionsFilter } from './http/http-exception.filter';
 import { TasksController } from './tasks/tasks.controller';
@@ -42,6 +44,11 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
       tcpClient(AUTH_SERVICE, 'AUTH_SERVICE', SERVICE_TCP_PORTS.AUTH),
       tcpClient(USER_SERVICE, 'USER_SERVICE', SERVICE_TCP_PORTS.USER),
       tcpClient(TASK_SERVICE, 'TASK_SERVICE', SERVICE_TCP_PORTS.TASK),
+      tcpClient(
+        NOTIFICATION_SERVICE,
+        'NOTIFICATION_SERVICE',
+        SERVICE_TCP_PORTS.NOTIFICATION,
+      ),
     ]),
     // Secret truyền khi verify (JwtAuthGuard), giống cách Auth Service ký token
     JwtModule.register({}),
@@ -62,6 +69,7 @@ const tcpClient = (name: string, envPrefix: string, defaultPort: number) => ({
     UsersController,
     TasksController,
     AdminUsersController,
+    NotificationsController,
   ],
   providers: [
     // Mọi route cần access token, trừ route có @Public()

@@ -2,10 +2,10 @@
 
 Dự án học tập: hệ thống quản lý công việc viết theo kiến trúc microservices, dùng **NestJS monorepo**.
 
-- **5 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`, `notification-service` (nhận event qua RabbitMQ)
+- **5 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`, `notification-service` (nhận event qua RabbitMQ, lưu thông báo)
 - **Thư viện dùng chung** `@app/common` trong `libs/common` (constants, message patterns, pipe...)
 - **Giao tiếp**: TCP (đồng bộ, giữa Gateway và các service) + RabbitMQ (bất đồng bộ, event)
-- **Hạ tầng** (Docker): PostgreSQL (mỗi service một DB: `auth_db`, `user_db`, `task_db`), Redis, RabbitMQ
+- **Hạ tầng** (Docker): PostgreSQL (mỗi service một DB: `auth_db`, `user_db`, `task_db`, `notification_db`), Redis, RabbitMQ
 - **ORM**: Prisma, mỗi service có schema và client riêng (`apps/<service>/prisma`)
 
 > Lộ trình và trạng thái từng phần: xem [TODO.md](TODO.md).
@@ -42,7 +42,7 @@ docker compose up -d
 docker compose ps        # đợi cả 3 container ở trạng thái healthy
 ```
 
-Lần chạy đầu, script `docker/postgres/init-multiple-dbs.sh` tự tạo 3 database `auth_db`, `user_db`, `task_db`.
+Lần chạy đầu, script `docker/postgres/init-multiple-dbs.sh` tự tạo 4 database `auth_db`, `user_db`, `task_db`, `notification_db`. Volume Postgres tạo từ trước khi có `notification_db` thì script không chạy lại: `prisma:notification:migrate` (`migrate dev`) tự tạo database còn thiếu.
 Giao diện quản trị RabbitMQ: http://localhost:15672 (guest/guest).
 
 Tắt hạ tầng: `docker compose down` (thêm `-v` nếu muốn xoá luôn dữ liệu).
@@ -63,6 +63,10 @@ npm run prisma:auth:migrate
 # Task Service (task_db)
 npm run prisma:task:generate
 npm run prisma:task:migrate
+
+# Notification Service (notification_db) — .env cần NOTIFICATION_DATABASE_URL (xem .env.example)
+npm run prisma:notification:generate
+npm run prisma:notification:migrate
 ```
 
 Client được sinh vào `apps/<service>/generated/prisma`. `migrate` chạy `prisma migrate dev`: áp dụng migration có sẵn và tự gọi lại `generate`.
@@ -83,12 +87,14 @@ npm run start:dev user-service    # TCP, cổng USER_SERVICE_PORT (mặc định
 npm run start:dev auth-service    # TCP, cổng AUTH_SERVICE_PORT (mặc định 4001)
 npm run start:dev task-service    # TCP, cổng TASK_SERVICE_PORT (mặc định 4003)
 npm run start:dev gateway         # HTTP, cổng GATEWAY_PORT (mặc định 3000), cần auth-service + user-service (+ task-service cho /tasks)
-npm run start:dev notification-service  # RabbitMQ, queue RABBITMQ_QUEUE (mặc định notifications_queue)
+npm run start:dev notification-service  # RabbitMQ (queue RABBITMQ_QUEUE) + TCP, cổng NOTIFICATION_SERVICE_PORT (mặc định 4004)
 ```
 
-> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP.
+> `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service`/`notification-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP.
 
-`notification-service` không mở cổng: nó nhận event bất đồng bộ (`@EventPattern`) từ queue `RABBITMQ_QUEUE` (kết nối theo `RABBITMQ_USER/PASSWORD/HOST/PORT`). Event hiện có: `user.registered`, `task.created` (tên + payload ở `NOTIFICATION_EVENTS` và `libs/common/src/dto/events`). Queue `durable` + message `persistent`, ack thủ công: message chỉ bị xoá khỏi queue khi xử lý xong, service tắt thì event nằm chờ trong queue. Payload sai, handler lỗi hoặc event không có handler -> message chuyển vào dead-letter queue `<queue>.dlq` (không giao lại ngay, tránh lặp vô hạn) và ghi log một lần; xem/đưa lại message trong DLQ qua giao diện quản trị RabbitMQ (shovel hoặc Move messages). Giao "ít nhất một lần": mỗi event có `eventId` (UUID) để phía nhận chống xử lý trùng.
+`notification-service` nhận event bất đồng bộ (`@EventPattern`, chỉ trên RabbitMQ) từ queue `RABBITMQ_QUEUE` (kết nối theo `RABBITMQ_USER/PASSWORD/HOST/PORT`). Event hiện có: `user.registered`, `task.created` (tên + payload ở `NOTIFICATION_EVENTS` và `libs/common/src/dto/events`). Queue `durable` + message `persistent`, ack thủ công: message chỉ bị xoá khỏi queue khi xử lý xong, service tắt thì event nằm chờ trong queue. Payload sai, handler lỗi hoặc event không có handler -> message chuyển vào dead-letter queue `<queue>.dlq` (không giao lại ngay, tránh lặp vô hạn) và ghi log một lần; xem/đưa lại message trong DLQ qua giao diện quản trị RabbitMQ (shovel hoặc Move messages). Giao "ít nhất một lần": mỗi event có `eventId` (UUID) để phía nhận chống xử lý trùng.
+
+Mỗi event thành một thông báo lưu trong `notification_db` (`user.registered` -> chào mừng user mới, `task.created` -> báo chủ task). `eventId` là UNIQUE: event giao lại không tạo thông báo trùng. Xem danh sách qua Gateway: `GET /notifications?page=&limit=` (cần access token, chỉ thông báo của người gọi, mới nhất trước) — Gateway gọi `notification.find_all` qua TCP.
 
 Phía phát: Auth Service phát `user.registered` khi đăng ký xong (đã lưu credential), Task Service phát `task.created` sau khi tạo task — qua `NotificationPublisher` (import `NotificationsPublisherModule` từ `@app/common`, tự gắn `eventId`). Phát kiểu "bắn rồi quên": request không chờ RabbitMQ, RabbitMQ tắt thì đăng ký/tạo task vẫn thành công, event đó chỉ được ghi log lỗi (chưa có outbox để phát lại).
 
@@ -130,7 +136,7 @@ Admin không tự đổi role hay tự khoá chính mình được (400). User b
 
 `errors` chỉ có với lỗi validate. Body/query được validate ngay ở Gateway (`ValidationPipe` toàn cục: bỏ qua field không khai báo trong DTO, gửi field lạ -> 400), service phía trong validate lại payload. Lỗi không lường trước trả `500 Internal server error` và chỉ ghi chi tiết vào log.
 
-Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 5 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng — riêng `notification-service` chờ log đã kết nối RabbitMQ, nên cần RabbitMQ đang chạy (CI cũng chạy bước này).
+Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 5 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng — riêng `notification-service` chờ cả cổng TCP lẫn queue của nó có consumer, nên cần RabbitMQ (và Postgres) đang chạy (CI cũng chạy bước này).
 
 ## Test
 
@@ -149,14 +155,16 @@ npm run test:e2e:task
 
 # E2E Gateway: bật User + Auth Service thật (TCP, cổng 4202/4201) và Gateway, gọi REST /auth/*;
 # bật Task Service thật (TCP, cổng 4213) và gọi REST /tasks.
-# Cần Postgres (đã migrate user_db + auth_db + task_db) và Redis đang chạy.
+# Bật Notification Service thật (TCP 4224) và gọi REST /notifications (task.created -> thông báo).
+# Cần Postgres (đã migrate user_db + auth_db + task_db + notification_db), Redis và RabbitMQ.
 npm run test:e2e:gateway
 
 # Các e2e Auth/Task/Gateway phát event vào queue RabbitMQ riêng của từng file test (xoá khi
 # xong), nên cũng cần RabbitMQ đang chạy.
 
 # E2E Notification Service: bật service thật, phát event qua RabbitMQ (queue riêng cho
-# mỗi lần chạy, xoá khi xong). Cần RabbitMQ đang chạy.
+# mỗi lần chạy, xoá khi xong) và gọi notification.find_all qua TCP (cổng 4104).
+# Cần RabbitMQ + Postgres (đã migrate notification_db).
 npm run test:e2e:notification
 ```
 
@@ -168,7 +176,7 @@ apps/
   auth-service/    # Đăng ký, đăng nhập, JWT, refresh token
   user-service/    # Quản lý user (Prisma + TCP)
   task-service/    # Quản lý task
-  notification-service/ # Nhận event qua RabbitMQ (user.registered, task.created)
+  notification-service/ # Nhận event qua RabbitMQ, lưu + trả danh sách thông báo (TCP)
 libs/
   common/          # @app/common: constants, message patterns, pipe dùng chung
 docker/            # Script khởi tạo Postgres

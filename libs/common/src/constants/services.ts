@@ -5,6 +5,7 @@
 export const AUTH_SERVICE = 'AUTH_SERVICE';
 export const USER_SERVICE = 'USER_SERVICE';
 export const TASK_SERVICE = 'TASK_SERVICE';
+export const NOTIFICATION_SERVICE = 'NOTIFICATION_SERVICE';
 
 /**
  * Cổng TCP mặc định cho từng service (đồng bộ với docker-compose & .env).
@@ -13,4 +14,5 @@ export const SERVICE_TCP_PORTS = {
   AUTH: 4001,
   USER: 4002,
   TASK: 4003,
+  NOTIFICATION: 4004,
 } as const;

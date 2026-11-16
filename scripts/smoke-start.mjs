@@ -1,6 +1,6 @@
 // Smoke test bản build: chạy `node dist/apps/<app>/main.js` cho từng app và chờ app nghe
-// được cổng (Notification Service không mở cổng mà nhận event qua RabbitMQ: chờ tới khi
-// queue của nó có consumer). Bắt các lỗi chỉ xảy ra khi chạy bản build thật (vd: thiếu
+// được cổng (Notification Service: chờ cả queue RabbitMQ của nó có consumer lẫn cổng TCP
+// cho Gateway — hai transport khởi động song song, có cái này chưa chắc có cái kia). Bắt các lỗi chỉ xảy ra khi chạy bản build thật (vd: thiếu
 // `import 'reflect-metadata'` ở main.ts) mà jest không thấy vì đã nạp sẵn qua setupFiles.
 // Chạy sau `nest build` cho cả 5 app: `npm run smoke:start` (cần RabbitMQ đang chạy).
 import { spawn } from 'node:child_process';
@@ -14,6 +14,7 @@ const APPS = [
   { name: 'gateway', port: process.env.GATEWAY_PORT ?? 3000 },
   {
     name: 'notification-service',
+    port: process.env.NOTIFICATION_SERVICE_PORT ?? 4004,
     queue: process.env.RABBITMQ_QUEUE || 'notifications_queue',
   },
 ];
@@ -42,14 +43,20 @@ async function consumerCount(queue) {
   }
 }
 
-/** App đã sẵn sàng: nghe được cổng, hoặc (app RabbitMQ) queue đã có consumer. */
-const isReady = (app) =>
-  app.queue
-    ? consumerCount(app.queue).then((n) => n > 0)
-    : isListening(app.port);
+const hasConsumer = (queue) => consumerCount(queue).then((n) => n > 0);
 
-/** Đã có tiến trình khác chiếm chỗ (cổng đang nghe / queue đã có consumer). */
-const isTaken = isReady;
+/** App đã sẵn sàng: nghe được cổng VÀ (app có queue) queue đã có consumer. */
+const isReady = async (app) =>
+  (await isListening(app.port)) &&
+  (!app.queue || (await hasConsumer(app.queue)));
+
+/**
+ * Đã có tiến trình khác chiếm chỗ: cổng đang nghe HOẶC queue đã có consumer — một trong
+ * hai thì kết quả "sẵn sàng" không chứng minh được app vừa chạy.
+ */
+const isTaken = async (app) =>
+  (await isListening(app.port)) ||
+  (!!app.queue && (await hasConsumer(app.queue)));
 
 const isListening = (port) =>
   new Promise((resolve) => {
@@ -94,7 +101,9 @@ function start(app) {
 }
 
 function describe(app) {
-  return app.queue ? `consumer trên queue ${app.queue}` : `cổng ${app.port}`;
+  return app.queue
+    ? `cổng ${app.port} + consumer trên queue ${app.queue}`
+    : `cổng ${app.port}`;
 }
 
 const running = [];

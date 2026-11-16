@@ -44,7 +44,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 ## Giai đoạn 4 — Nâng cao (nếu còn thời gian)
 - [x] Notification Service + kết nối RabbitMQ (lắng nghe event)
 - [x] Task/User phát event async (`task.created`, `user.registered`)
-- [ ] Xem danh sách thông báo theo user
+- [x] Lưu + xem danh sách thông báo theo user (`GET /notifications`)
 
 ## Giai đoạn 5 — Hoàn thiện & đóng gói
 - [ ] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)

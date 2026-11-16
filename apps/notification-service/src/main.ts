@@ -1,26 +1,26 @@
 // Nạp trước mọi import: decorator của class-transformer (DTO trong @app/common)
 // gọi Reflect.getMetadata ngay khi file được nạp, trước khi @nestjs/core kịp nạp nó.
 import 'reflect-metadata';
-import { notificationsConsumerOptions, notificationsQueue } from '@app/common';
+import { notificationsQueue } from '@app/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { MicroserviceOptions } from '@nestjs/microservices';
 import { NotificationServiceModule } from './notification-service.module';
+import { connectTransports, notificationTcpAddress } from './transports';
 
 async function bootstrap() {
-  // ConfigModule.forRoot() trong NotificationServiceModule đã nạp .env vào process.env
-  // ngay khi module được import, nên có thể đọc cấu hình RabbitMQ ở đây.
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    NotificationServiceModule,
-    notificationsConsumerOptions(process.env),
-  );
-  // SIGTERM/SIGINT (vd: docker stop) -> đóng kết nối RabbitMQ; message chưa ack được
-  // RabbitMQ giao lại cho lần chạy sau
+  // App hybrid không mở cổng HTTP (không gọi app.listen): chỉ chạy các microservice
+  // gắn vào. ConfigModule.forRoot() trong module đã nạp .env vào process.env.
+  const app = await NestFactory.create(NotificationServiceModule);
+  connectTransports(app, process.env);
+  // SIGTERM/SIGINT (vd: docker stop) -> đóng kết nối RabbitMQ + DB; message chưa ack
+  // được RabbitMQ giao lại cho lần chạy sau
   app.enableShutdownHooks();
 
-  await app.listen();
+  await app.init();
+  await app.startAllMicroservices();
+  const { host, port } = notificationTcpAddress(process.env);
   Logger.log(
-    `Notification Service (RabbitMQ) đang lắng nghe queue ${notificationsQueue(process.env)}`,
+    `Notification Service đang lắng nghe queue ${notificationsQueue(process.env)} (RabbitMQ) và ${host}:${port} (TCP)`,
     'Bootstrap',
   );
 }

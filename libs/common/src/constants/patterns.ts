@@ -31,3 +31,8 @@ export const TASK_PATTERNS = {
   UPDATE: 'task.update',
   DELETE: 'task.delete',
 } as const;
+
+export const NOTIFICATION_PATTERNS = {
+  /** Thông báo của chính người gọi, mới nhất trước (payload kèm danh tính từ Gateway). */
+  FIND_ALL: 'notification.find_all',
+} as const;

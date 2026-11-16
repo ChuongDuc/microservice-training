@@ -50,6 +50,7 @@ jobs:
       USER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/user_db?schema=public
       AUTH_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/auth_db?schema=public
       TASK_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/task_db?schema=public
+      NOTIFICATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/notification_db?schema=public
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       RABBITMQ_HOST: localhost
@@ -75,7 +76,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          for db in user_db auth_db task_db; do
+          for db in user_db auth_db task_db notification_db; do
             psql -h localhost -U postgres -c "CREATE DATABASE $db;" || true
           done
 
@@ -114,6 +115,18 @@ jobs:
           npx prisma migrate diff --exit-code \
             --from-schema-datasource apps/task-service/prisma/schema.prisma \
             --to-schema-datamodel apps/task-service/prisma/schema.prisma
+
+      - name: Generate Prisma client (notification-service)
+        run: npm run prisma:notification:generate
+
+      # Áp dụng migration lên DB trống của CI rồi so DB với schema.prisma: sửa schema mà
+      # quên tạo migration -> migrate diff thoát mã 2, CI đỏ
+      - name: Apply migrations + check schema drift (notification_db)
+        run: |
+          npx prisma migrate deploy --schema=apps/notification-service/prisma/schema.prisma
+          npx prisma migrate diff --exit-code \
+            --from-schema-datasource apps/notification-service/prisma/schema.prisma \
+            --to-schema-datamodel apps/notification-service/prisma/schema.prisma
 
       - name: Lint
         run: npm run lint
