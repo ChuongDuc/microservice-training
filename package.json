@@ -14,6 +14,8 @@
     "start:prod": "node dist/apps/gateway/main",
     "smoke:start": "node scripts/smoke-start.mjs",
     "smoke:docker": "node --env-file-if-exists=.env scripts/docker-smoke.mjs",
+    "env:init": "node scripts/init-env.mjs",
+    "demo": "node --env-file-if-exists=.env scripts/demo.mjs",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

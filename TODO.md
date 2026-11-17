@@ -46,12 +46,12 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Task/User phát event async (`task.created`, `user.registered`)
 - [x] Lưu + xem danh sách thông báo theo user (`GET /notifications`)
 
-## Giai đoạn 5 — Hoàn thiện & đóng gói
+## Giai đoạn 5 — Hoàn thiện & đóng gói ✅ HOÀN TẤT
 - [x] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)
 - [x] Chạy toàn hệ thống bằng `docker compose --profile app up -d --build`
 - [x] Swagger ở Gateway (`/api`)
 - [x] Health check mỗi service (`GET /health`, Docker healthcheck)
-- [ ] README + sơ đồ kiến trúc + kịch bản demo
+- [x] README + sơ đồ kiến trúc + kịch bản demo (`docs/`)
 
 ---
 

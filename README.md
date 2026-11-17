@@ -1,21 +1,98 @@
 # Task Management — Microservices với NestJS
 
-Dự án học tập: hệ thống quản lý công việc viết theo kiến trúc microservices, dùng **NestJS monorepo**.
+Hệ thống quản lý công việc viết theo kiến trúc microservices bằng **NestJS monorepo**: đăng ký, đăng nhập bằng JWT, quản lý task cá nhân, phân quyền ADMIN và thông báo bất đồng bộ qua RabbitMQ. Đây là dự án học tập cho Career Up Program.
 
-- **5 app** trong `apps/`: `gateway` (HTTP public), `auth-service`, `user-service`, `task-service`, `notification-service` (nhận event qua RabbitMQ, lưu thông báo)
-- **Thư viện dùng chung** `@app/common` trong `libs/common` (constants, message patterns, pipe...)
-- **Giao tiếp**: TCP (đồng bộ, giữa Gateway và các service) + RabbitMQ (bất đồng bộ, event)
-- **Hạ tầng** (Docker): PostgreSQL (mỗi service một DB: `auth_db`, `user_db`, `task_db`, `notification_db`), Redis, RabbitMQ
-- **ORM**: Prisma, mỗi service có schema và client riêng (`apps/<service>/prisma`)
+- [Kiến trúc chi tiết và các quyết định thiết kế](docs/architecture.md)
+- [Kịch bản demo](docs/demo.md)
+- [Lộ trình (TODO)](TODO.md)
 
-> Lộ trình và trạng thái từng phần: xem [TODO.md](TODO.md).
+## Tính năng
 
-## Yêu cầu
+- **Xác thực:**
+  - Đăng ký và đăng nhập, mật khẩu hash bằng argon2.
+  - Access token JWT 15 phút; refresh token 7 ngày, xoay vòng mỗi lần dùng và thu hồi khi logout (lưu ở Redis).
+  - Chống dò mật khẩu bằng rate limit.
+- **Task:** CRUD có phân trang và lọc theo trạng thái; mỗi người chỉ thấy và sửa được task của mình.
+- **Phân quyền:** role `USER` / `ADMIN`; admin xem danh sách user, đổi role, khoá tài khoản.
+- **Thông báo:** đăng ký và tạo task phát event qua RabbitMQ; Notification Service lưu lại, user xem ở `GET /notifications`.
+- **Vận hành:**
+  - Swagger UI ở `/api`, health check ở `/health`.
+  - Lỗi trả về theo một dạng thống nhất.
+  - Chạy cả hệ thống bằng một lệnh Docker Compose.
+  - CI chạy unit test, e2e và smoke test trên Docker.
 
-- Node.js LTS (kèm npm)
+## Kiến trúc
+
+```mermaid
+flowchart LR
+    client([Client]) -- "REST :3000" --> gateway[Gateway]
+    gateway -- TCP --> auth[Auth Service]
+    gateway -- TCP --> user[User Service]
+    gateway -- TCP --> task[Task Service]
+    gateway -- TCP --> notif[Notification Service]
+    auth -- TCP --> user
+    auth -. "user.registered" .-> mq[[RabbitMQ]]
+    task -. "task.created" .-> mq
+    mq -.-> notif
+    auth --- authdb[(auth_db + Redis)]
+    user --- userdb[(user_db)]
+    task --- taskdb[(task_db)]
+    notif --- notifdb[(notification_db)]
+```
+
+| App                    | Cổng                | Vai trò                                                                   |
+| ---------------------- | ------------------- | ------------------------------------------------------------------------- |
+| `gateway`              | HTTP 3000           | Cửa vào duy nhất: verify JWT, RBAC, rate limit, validate, Swagger, health |
+| `auth-service`         | TCP 4001            | Đăng ký, đăng nhập, cấp và thu hồi token                                  |
+| `user-service`         | TCP 4002            | Hồ sơ user, role, trạng thái khoá                                         |
+| `task-service`         | TCP 4003            | CRUD task theo chủ sở hữu                                                 |
+| `notification-service` | TCP 4004 + RabbitMQ | Nhận event, lưu và trả thông báo                                          |
+
+**Công nghệ:**
+
+- NestJS 10 (monorepo, `@nestjs/microservices`)
+- Prisma + PostgreSQL 16 (mỗi service một database)
+- Redis, RabbitMQ
+- class-validator, Swagger (`@nestjs/swagger`)
+- Jest + Supertest
+- Docker Compose, GitHub Actions
+
+Thư viện dùng chung `@app/common` (`libs/common`) chứa message pattern, DTO, dạng lỗi và cấu hình dùng chung giữa các service.
+
+## Chạy nhanh bằng Docker
+
+Cách nhanh nhất để thấy hệ thống chạy. Chỉ cần **Docker Desktop** (hoặc Docker Engine + Compose v2) và **Node.js 22.9+**; không cần `npm install`, Node chỉ dùng để tạo `.env` và chạy script kiểm tra.
+
+```bash
+git clone https://github.com/ChuongDuc/microservice-training.git
+cd microservice-training
+npm run env:init                              # tạo .env, sinh sẵn JWT secret ngẫu nhiên
+docker compose --profile app up -d --build    # lần đầu mất vài phút để build image
+```
+
+Lệnh `up` chờ tới khi các service bên trong đã `healthy` rồi mới bật Gateway. Sau đó:
+
+- Swagger UI (xem và gọi thử API): http://localhost:3000/api
+- Trạng thái hệ thống: http://localhost:3000/health
+- RabbitMQ: http://localhost:15672 (guest/guest)
+
+Kiểm tra bằng API thật:
+
+```bash
+npm run smoke:docker   # nhanh: health, đăng ký, đăng nhập, thông báo (CI cũng chạy)
+npm run demo           # đủ kịch bản demo: task, quyền sở hữu, admin, token, rate limit
+```
+
+Tắt: `docker compose --profile app down` (thêm `-v` để xoá cả dữ liệu).
+
+## Chạy ở chế độ phát triển
+
+Hạ tầng (Postgres, Redis, RabbitMQ) chạy trong Docker, các app chạy trực tiếp bằng Node với hot reload. Không chạy song song với các app trong Docker: chúng dùng chung cổng 3000.
+
+### Yêu cầu
+
+- Node.js 22.9+ (kèm npm; các script dùng `node --env-file-if-exists`, có từ 22.9)
 - Docker + Docker Compose
-
-## Cài đặt và chạy
 
 ### 1. Cài dependencies
 
@@ -26,10 +103,12 @@ npm install
 ### 2. Tạo file môi trường
 
 ```bash
-cp .env.example .env
+npm run env:init
 ```
 
-Giá trị mặc định trong `.env.example` đã khớp với `docker-compose.yml`. **Bắt buộc đổi `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`**: Gateway/Auth không khởi động nếu secret còn là giá trị mẫu, ngắn hơn 32 ký tự hoặc hai secret trùng nhau. Tạo mỗi secret bằng:
+Lệnh này copy `.env.example` thành `.env` và sinh ngẫu nhiên `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`. Nếu `.env` đã có thì giữ nguyên. Các giá trị khác mặc định đã khớp với `docker-compose.yml`.
+
+Muốn tự làm: `cp .env.example .env`, rồi thay hai secret JWT. Gateway và Auth không khởi động nếu secret còn là giá trị mẫu, ngắn hơn 32 ký tự hoặc hai secret trùng nhau. Tạo mỗi secret bằng:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -92,6 +171,10 @@ npm run start:dev notification-service  # RabbitMQ (queue RABBITMQ_QUEUE) + TCP,
 
 > `gateway` là cửa vào HTTP duy nhất (cổng `GATEWAY_PORT`), có các route `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` và forward xuống Auth Service qua TCP. Mọi route khác cần header `Authorization: Bearer <accessToken>` (Gateway tự verify bằng `JWT_ACCESS_SECRET`, thiếu/sai token -> 401); `GET /auth/me` trả `userId` + `role` của token; `GET /users/me` trả hồ sơ từ User Service (Gateway truyền danh tính `{ user: { userId, role } }` xuống trong payload). `auth-service`/`user-service`/`task-service`/`notification-service` mặc định chỉ nghe `127.0.0.1` (`*_SERVICE_BIND_HOST`) vì tin danh tính trong payload — chỉ Gateway được gọi tới. `task-service` nhận `task.create/find_all/find_one/update/delete` qua TCP.
 
+Mở http://localhost:3000/api (Swagger UI) để gọi thử, hoặc chạy `npm run demo`.
+
+## API và cơ chế hoạt động
+
 `notification-service` nhận event bất đồng bộ (`@EventPattern`, chỉ trên RabbitMQ) từ queue `RABBITMQ_QUEUE` (kết nối theo `RABBITMQ_USER/PASSWORD/HOST/PORT`). Event hiện có: `user.registered`, `task.created` (tên + payload ở `NOTIFICATION_EVENTS` và `libs/common/src/dto/events`). Queue `durable` + message `persistent`, ack thủ công: message chỉ bị xoá khỏi queue khi xử lý xong, service tắt thì event nằm chờ trong queue. Payload sai, handler lỗi hoặc event không có handler -> message chuyển vào dead-letter queue `<queue>.dlq` (không giao lại ngay, tránh lặp vô hạn) và ghi log một lần; xem/đưa lại message trong DLQ qua giao diện quản trị RabbitMQ (shovel hoặc Move messages). Giao "ít nhất một lần": mỗi event có `eventId` (UUID) để phía nhận chống xử lý trùng.
 
 Mỗi event thành một thông báo lưu trong `notification_db` (`user.registered` -> chào mừng user mới, `task.created` -> báo chủ task). `eventId` là UNIQUE: event giao lại không tạo thông báo trùng. Xem danh sách qua Gateway: `GET /notifications?page=&limit=` (cần access token, chỉ thông báo của người gọi, mới nhất trước) — Gateway gọi `notification.find_all` qua TCP.
@@ -124,10 +207,16 @@ Phân quyền theo role: gắn `@Roles('ADMIN')` ở controller hoặc route (g�
   "status": "down",
   "services": {
     "gateway": { "status": "up" },
-    "auth-service": { "status": "up", "dependencies": { "database": "up", "redis": "up" } },
+    "auth-service": {
+      "status": "up",
+      "dependencies": { "database": "up", "redis": "up" }
+    },
     "user-service": { "status": "down" },
     "task-service": { "status": "up", "dependencies": { "database": "up" } },
-    "notification-service": { "status": "up", "dependencies": { "database": "up", "rabbitmq": "down" } }
+    "notification-service": {
+      "status": "up",
+      "dependencies": { "database": "up", "rabbitmq": "down" }
+    }
   }
 }
 ```
@@ -157,16 +246,25 @@ Admin không tự đổi role hay tự khoá chính mình được (400). User b
 **Dạng lỗi thống nhất.** Mọi lỗi (từ Gateway hay từ service phía trong) trả về cùng một dạng:
 
 ```json
-{ "statusCode": 400, "message": "Validation failed", "errors": [{ "field": "title", "constraints": { "isNotEmpty": "title should not be empty" } }] }
+{
+  "statusCode": 400,
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "title",
+      "constraints": { "isNotEmpty": "title should not be empty" }
+    }
+  ]
+}
 ```
 
 `errors` chỉ có với lỗi validate. Body/query được validate ngay ở Gateway (`ValidationPipe` toàn cục: bỏ qua field không khai báo trong DTO, gửi field lạ -> 400), service phía trong validate lại payload. Lỗi không lường trước trả `500 Internal server error` và chỉ ghi chi tiết vào log.
 
 Build một app: `npx nest build <app>` (output nằm trong `dist/apps/<app>`). Sau khi build cả 5 app, `npm run smoke:start` chạy thử từng bản build (`node dist/apps/<app>/main.js`) tới khi nghe được cổng — riêng `notification-service` chờ cả cổng TCP lẫn queue của nó có consumer, nên cần RabbitMQ (và Postgres) đang chạy (CI cũng chạy bước này).
 
-## Chạy toàn hệ thống bằng Docker
+## Docker: chi tiết
 
-Một lệnh bật hạ tầng, chạy migration và cả 5 app trong container (không cần Node.js trên máy, chỉ cần `.env` có `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` như bước 2):
+Một lệnh bật hạ tầng, chạy migration và cả 5 app trong container (xem [Chạy nhanh bằng Docker](#chạy-nhanh-bằng-docker)). Compose chỉ cần `.env` có `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (`npm run env:init`):
 
 ```bash
 docker compose --profile app up -d --build
@@ -218,14 +316,33 @@ npm run test:e2e:notification
 
 ```
 apps/
-  gateway/         # API Gateway (HTTP)
-  auth-service/    # Đăng ký, đăng nhập, JWT, refresh token
-  user-service/    # Quản lý user (Prisma + TCP)
-  task-service/    # Quản lý task
-  notification-service/ # Nhận event qua RabbitMQ, lưu + trả danh sách thông báo (TCP)
+  gateway/              # API Gateway (HTTP): controller REST, guard JWT/role, Swagger, health
+  auth-service/         # Đăng ký, đăng nhập, JWT, refresh token (auth_db + Redis)
+  user-service/         # Hồ sơ user, role, khoá tài khoản (user_db)
+  task-service/         # CRUD task theo chủ sở hữu (task_db)
+  notification-service/ # Nhận event qua RabbitMQ, lưu + trả thông báo (notification_db)
+  <app>/prisma/         # Prisma schema + migration riêng của từng service
+  <app>/test/           # E2E của từng app
 libs/
-  common/          # @app/common: constants, message patterns, pipe dùng chung
-docker/            # Script khởi tạo Postgres
-Dockerfile         # Image cho từng app (build arg APP)
-docker-compose.yml # Postgres + Redis + RabbitMQ; profile `app`: migration + 5 app
+  common/               # @app/common: message pattern, DTO, lỗi, RabbitMQ, health
+docs/                   # Kiến trúc, kịch bản demo
+scripts/                # env:init, demo, smoke test, Docker healthcheck
+test/e2e/               # Helper dùng chung cho e2e
+docker/                 # Script khởi tạo Postgres (tạo 4 database)
+Dockerfile              # Image cho từng app (build arg APP)
+docker-compose.yml      # Postgres + Redis + RabbitMQ; profile `app`: migration + 5 app
 ```
+
+## Xử lý sự cố
+
+| Triệu chứng                                                                | Nguyên nhân / cách xử lý                                                                                                                                    |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `failed to connect to the docker API`                                      | Docker Desktop chưa chạy: bật Docker Desktop, chờ tới khi sẵn sàng rồi chạy lại.                                                                            |
+| `migrate` thoát lỗi, log nói về `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | `.env` thiếu secret hoặc còn giá trị mẫu: chạy `npm run env:init` (với `.env` mới) hoặc sửa hai dòng đó theo [bước 2](#2-tạo-file-môi-trường).              |
+| Gateway/Auth chạy bằng `start:dev` thoát ngay vì JWT secret                | Như trên: secret phải dài ít nhất 32 ký tự, khác giá trị mẫu, và hai secret khác nhau.                                                                      |
+| `port is already allocated` / `EADDRINUSE :3000`                           | Cổng 3000 đang bị dùng (thường là Gateway chạy cả trong Docker lẫn `start:dev`): tắt một bên, hoặc đổi `GATEWAY_PORT` trong `.env`.                         |
+| `GET /health` trả 503                                                      | Xem thành phần nào `down` trong body; `docker compose --profile app ps` và `docker compose logs <service>` để xem lỗi.                                      |
+| Route trả 503 "... không khả dụng"                                         | Service tương ứng chưa chạy hoặc đã chết (`start:dev` chưa bật service đó).                                                                                 |
+| `PRECONDITION_FAILED` từ RabbitMQ                                          | Queue cũ tạo trước khi có dead-letter queue: `docker compose exec rabbitmq rabbitmqctl delete_queue notifications_queue`.                                   |
+| `notification_db` không tồn tại                                            | Volume Postgres tạo trước khi có database này: `npm run prisma:notification:migrate` tự tạo, hoặc `docker compose down -v` để tạo lại từ đầu (mất dữ liệu). |
+| 429 khi đăng ký/đăng nhập                                                  | Giới hạn theo IP trong 60 giây (`LOGIN_THROTTLE_*` trong `.env`): chờ một phút.                                                                             |
