@@ -9,52 +9,9 @@
 // Chạy: `npm run smoke:docker` — nạp `.env` (nếu có) giống docker compose, nên Gateway ở
 // http://localhost:<GATEWAY_PORT, mặc định 3000>; ghi đè cả URL bằng GATEWAY_URL.
 import { randomUUID } from 'node:crypto';
+import { BASE_URL, call, waitFor } from './lib/gateway-client.mjs';
 
-const BASE_URL =
-  process.env.GATEWAY_URL ??
-  `http://localhost:${process.env.GATEWAY_PORT || 3000}`;
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS ?? 120_000);
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function call(method, path, { body, token } = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    body: body && JSON.stringify(body),
-  });
-  const text = await res.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : undefined;
-  } catch {
-    json = text;
-  }
-  return { status: res.status, body: json };
-}
-
-/** Gọi tới khi `check` trả về giá trị khác undefined, hoặc hết thời gian. */
-async function waitFor(label, check, timeoutMs = TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  let last;
-  for (;;) {
-    try {
-      const value = await check();
-      if (value !== undefined) return value;
-    } catch (error) {
-      last = error;
-    }
-    if (Date.now() > deadline) {
-      throw new Error(
-        `${label}: quá ${timeoutMs}ms${last ? ` (${last.message})` : ''}`,
-      );
-    }
-    await sleep(1000);
-  }
-}
 
 function expectStatus(step, res, status) {
   if (res.status !== status) {
@@ -67,16 +24,23 @@ function expectStatus(step, res, status) {
 
 async function main() {
   // Gateway lên: route cần token trả 401 thay vì lỗi kết nối
-  await waitFor('Gateway chưa trả lời', async () =>
-    (await call('GET', '/auth/me')).status === 401 ? true : undefined,
+  await waitFor(
+    'Gateway chưa trả lời',
+    async () =>
+      (await call('GET', '/auth/me')).status === 401 ? true : undefined,
+    TIMEOUT_MS,
   );
   console.log(`OK   Gateway trả lời tại ${BASE_URL}`);
 
   // Mọi service + phụ thuộc (DB, Redis, RabbitMQ) đều up: GET /health trả 200
-  const health = await waitFor('GET /health chưa up hết', async () => {
-    const res = await call('GET', '/health');
-    return res.status === 200 ? res : undefined;
-  });
+  const health = await waitFor(
+    'GET /health chưa up hết',
+    async () => {
+      const res = await call('GET', '/health');
+      return res.status === 200 ? res : undefined;
+    },
+    TIMEOUT_MS,
+  );
   expectStatus('GET /health', health, 200);
   console.log(
     `OK   Health: ${Object.entries(health.body.services)
@@ -90,13 +54,17 @@ async function main() {
   // Auth/User Service có thể chưa sẵn sàng ngay khi Gateway lên (503): thử lại. Mỗi lần
   // thử dùng email MỚI: 503 cũng có thể là Gateway hết thời gian chờ trong khi Auth vẫn
   // tạo user xong — gửi lại cùng email sẽ nhận 409 dù hệ thống chạy đúng.
-  const register = await waitFor('POST /auth/register', async () => {
-    email = `smoke-${randomUUID()}@test.com`;
-    const res = await call('POST', '/auth/register', {
-      body: { email, password, displayName: 'Smoke' },
-    });
-    return res.status === 503 ? undefined : res;
-  });
+  const register = await waitFor(
+    'POST /auth/register',
+    async () => {
+      email = `smoke-${randomUUID()}@test.com`;
+      const res = await call('POST', '/auth/register', {
+        body: { email, password, displayName: 'Smoke' },
+      });
+      return res.status === 503 ? undefined : res;
+    },
+    TIMEOUT_MS,
+  );
   expectStatus('POST /auth/register', register, 201);
 
   const login = await call('POST', '/auth/login', {
