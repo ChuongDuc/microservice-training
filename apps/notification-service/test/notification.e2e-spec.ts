@@ -1,5 +1,6 @@
 import {
   deadLetterQueue,
+  HEALTH_PATTERNS,
   NOTIFICATION_EVENTS,
   NOTIFICATION_PATTERNS,
   notificationsRmqOptions,
@@ -20,6 +21,7 @@ import { firstValueFrom, lastValueFrom } from 'rxjs';
 import { NotificationServiceModule } from '../src/notification-service.module';
 import { NotificationServiceService } from '../src/notification-service.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { assertQueueHasConsumer } from '../src/rmq/queue-consumer';
 import { connectTransports } from '../src/transports';
 import { eventually } from '../../../test/e2e/eventually';
 
@@ -321,5 +323,34 @@ describe('Notification Service (e2e, RabbitMQ)', () => {
     await eventually(() =>
       expect(onUserRegistered).toHaveBeenCalledWith(event),
     );
+  });
+
+  describe(HEALTH_PATTERNS.CHECK, () => {
+    const health = () =>
+      firstValueFrom(tcpClient.send(HEALTH_PATTERNS.CHECK, {}));
+
+    it('DB sống + queue có consumer -> up', async () => {
+      expect(await health()).toEqual({
+        status: 'up',
+        dependencies: { database: 'up', rabbitmq: 'up' },
+      });
+    });
+
+    it('queue không có consumer hoặc chưa tồn tại -> lỗi (rabbitmq down)', async () => {
+      const url = rabbitmqUrl(process.env);
+      const idle = `${QUEUE}_idle`;
+      await channel.assertQueue(idle, { durable: false });
+      try {
+        await expect(assertQueueHasConsumer(url, idle)).rejects.toThrow(
+          'không có consumer',
+        );
+      } finally {
+        await channel.deleteQueue(idle);
+      }
+      await expect(
+        assertQueueHasConsumer(url, `${QUEUE}_missing`),
+      ).rejects.toThrow();
+      await expect(assertQueueHasConsumer(url, QUEUE)).resolves.toBeUndefined();
+    });
   });
 });

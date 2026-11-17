@@ -1,6 +1,6 @@
 // Smoke test cả hệ thống chạy trong Docker (`docker compose --profile app up -d --build`):
 // gọi API thật qua Gateway để chắc các container nói chuyện được với nhau:
-//   1. Gateway lên (chờ tới khi trả lời HTTP)
+//   1. Gateway lên (chờ tới khi trả lời HTTP), GET /health: mọi service + phụ thuộc up
 //   2. POST /auth/register  -> Gateway -> Auth -> User Service, auth_db + user_db
 //   3. POST /auth/login     -> JWT, Redis (refresh token)
 //   4. GET  /users/me       -> Gateway -> User Service
@@ -71,6 +71,18 @@ async function main() {
     (await call('GET', '/auth/me')).status === 401 ? true : undefined,
   );
   console.log(`OK   Gateway trả lời tại ${BASE_URL}`);
+
+  // Mọi service + phụ thuộc (DB, Redis, RabbitMQ) đều up: GET /health trả 200
+  const health = await waitFor('GET /health chưa up hết', async () => {
+    const res = await call('GET', '/health');
+    return res.status === 200 ? res : undefined;
+  });
+  expectStatus('GET /health', health, 200);
+  console.log(
+    `OK   Health: ${Object.entries(health.body.services)
+      .map(([name, { status }]) => `${name}=${status}`)
+      .join(', ')}`,
+  );
 
   const password = 'matkhau123';
   let email;

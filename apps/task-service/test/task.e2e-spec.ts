@@ -1,5 +1,6 @@
 import {
   createRpcValidationPipe,
+  HEALTH_PATTERNS,
   NOTIFICATION_EVENTS,
   TASK_PATTERNS,
 } from '@app/common';
@@ -390,6 +391,15 @@ describe('Task Service (e2e qua TCP)', () => {
       ).resolves.toMatchObject({ status: 'DONE' });
       await expect(send(TASK_PATTERNS.DELETE, payload)).resolves.toMatchObject({
         id: taskOfA.id,
+      });
+    });
+  });
+
+  describe(HEALTH_PATTERNS.CHECK, () => {
+    it('phụ thuộc đều sống -> up', async () => {
+      expect(await send(HEALTH_PATTERNS.CHECK, {})).toEqual({
+        status: 'up',
+        dependencies: { database: 'up' },
       });
     });
   });

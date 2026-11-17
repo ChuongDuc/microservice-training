@@ -2,6 +2,7 @@ import { AllRpcExceptionsFilter } from '@app/common';
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserServiceController } from './user-service.controller';
 import { UserServiceService } from './user-service.service';
@@ -11,7 +12,7 @@ import { UserServiceService } from './user-service.service';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
   ],
-  controllers: [UserServiceController],
+  controllers: [UserServiceController, HealthController],
   providers: [
     UserServiceService,
     // Mọi lỗi trả về phía gọi theo dạng thống nhất { statusCode, message, errors? }

@@ -36,3 +36,11 @@ export const NOTIFICATION_PATTERNS = {
   /** Thông báo của chính người gọi, mới nhất trước (payload kèm danh tính từ Gateway). */
   FIND_ALL: 'notification.find_all',
 } as const;
+
+/**
+ * Health check: cùng một pattern cho mọi service TCP (mỗi service một ClientProxy riêng
+ * nên không trùng). Service trả `ServiceHealth` (xem @app/common health).
+ */
+export const HEALTH_PATTERNS = {
+  CHECK: 'health.check',
+} as const;

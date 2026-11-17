@@ -50,7 +50,7 @@ Giao tiếp: **TCP** (đồng bộ) + **RabbitMQ** (bất đồng bộ).
 - [x] Dockerfile cho từng service + hoàn thiện docker-compose (chạy cả app)
 - [x] Chạy toàn hệ thống bằng `docker compose --profile app up -d --build`
 - [x] Swagger ở Gateway (`/api`)
-- [ ] Health check mỗi service
+- [x] Health check mỗi service (`GET /health`, Docker healthcheck)
 - [ ] README + sơ đồ kiến trúc + kịch bản demo
 
 ---

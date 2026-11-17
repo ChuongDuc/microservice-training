@@ -1,5 +1,6 @@
 import {
   AUTH_PATTERNS,
+  HEALTH_PATTERNS,
   createRpcValidationPipe,
   NOTIFICATION_EVENTS,
 } from '@app/common';
@@ -385,6 +386,15 @@ describe('Auth Service (e2e qua TCP)', () => {
       await expect(
         sendError(AUTH_PATTERNS.REFRESH, { refreshToken: 'abc' }),
       ).resolves.toMatchObject({ statusCode: 400 });
+    });
+  });
+
+  describe(HEALTH_PATTERNS.CHECK, () => {
+    it('phụ thuộc đều sống -> up', async () => {
+      expect(await send(HEALTH_PATTERNS.CHECK, {})).toEqual({
+        status: 'up',
+        dependencies: { database: 'up', redis: 'up' },
+      });
     });
   });
 });

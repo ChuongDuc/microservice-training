@@ -1,4 +1,8 @@
-import { createRpcValidationPipe, USER_PATTERNS } from '@app/common';
+import {
+  createRpcValidationPipe,
+  HEALTH_PATTERNS,
+  USER_PATTERNS,
+} from '@app/common';
 import { INestMicroservice } from '@nestjs/common';
 import {
   ClientProxy,
@@ -515,6 +519,15 @@ describe('User Service (e2e qua TCP)', () => {
       await expect(
         sendError(USER_PATTERNS.FIND_ME, payload),
       ).resolves.toMatchObject({ statusCode: 400 });
+    });
+  });
+
+  describe(HEALTH_PATTERNS.CHECK, () => {
+    it('phụ thuộc đều sống -> up', async () => {
+      expect(await send(HEALTH_PATTERNS.CHECK, {})).toEqual({
+        status: 'up',
+        dependencies: { database: 'up' },
+      });
     });
   });
 });

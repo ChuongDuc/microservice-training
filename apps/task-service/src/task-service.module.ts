@@ -5,6 +5,7 @@ import {
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { TaskServiceController } from './task-service.controller';
 import { TaskServiceService } from './task-service.service';
@@ -15,7 +16,7 @@ import { TaskServiceService } from './task-service.service';
     PrismaModule,
     NotificationsPublisherModule, // phát task.created qua RabbitMQ
   ],
-  controllers: [TaskServiceController],
+  controllers: [TaskServiceController, HealthController],
   providers: [
     TaskServiceService,
     // Mọi lỗi trả về phía gọi theo dạng thống nhất { statusCode, message, errors? }

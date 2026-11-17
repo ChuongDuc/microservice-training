@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { NotificationServiceController } from './notification-service.controller';
+import { HealthController } from './health.controller';
 import { NotificationServiceService } from './notification-service.service';
 import { NotificationsController } from './notifications.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,7 +18,11 @@ import { DeadLetterQueueSetup } from './rmq/dead-letter-queue.setup';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
   ],
-  controllers: [NotificationServiceController, NotificationsController],
+  controllers: [
+    NotificationServiceController,
+    NotificationsController,
+    HealthController,
+  ],
   providers: [
     NotificationServiceService,
     // Khai báo DLQ trước khi nhận event: message bị nack được giữ lại, không mất
